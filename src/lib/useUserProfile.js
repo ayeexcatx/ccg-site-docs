@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
+import { getRoleCapabilities } from '@/lib/roleUtils';
 
 // Hook to get the current user's profile with role info
 export function useUserProfile() {
@@ -33,10 +34,11 @@ export function useUserProfile() {
     loadProfile();
   }, []);
 
-  const isCompanyUser = profile && ['super_admin', 'company_admin', 'documenter'].includes(profile.role);
-  const isClientUser = profile && ['client_manager', 'client_viewer'].includes(profile.role);
-  const isAdmin = profile && ['super_admin', 'company_admin'].includes(profile.role);
+  const capabilities = getRoleCapabilities(profile?.role);
+  const isCompanyUser = !!capabilities.company;
+  const isClientUser = !!capabilities.client;
+  const isAdmin = !!capabilities.admin;
   const isDocumenter = profile?.role === 'documenter';
 
-  return { profile, isLoading, isCompanyUser, isClientUser, isAdmin, isDocumenter };
+  return { profile, isLoading, isCompanyUser, isClientUser, isAdmin, isDocumenter, capabilities };
 }

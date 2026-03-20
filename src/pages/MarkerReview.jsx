@@ -2,6 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import PageHeader from '@/components/ui/PageHeader';
+import PermissionNotice from '@/components/ui/PermissionNotice';
+import VisibilityBadge, { VISIBILITY_EXPLANATIONS } from '@/components/ui/VisibilityBadge';
 import EmptyState from '@/components/ui/EmptyState';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,7 +16,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { OperatingGuide, QAReviewChecklist, VisibilityRulesPanel, WorkflowStepsPanel, InstructionPanel } from '@/components/ui/OperatingGuidance';
 import { usePageInstructions } from '@/hooks/usePageInstructions';
+import { useUserProfile } from '@/lib/useUserProfile';
 import { MARKER_TYPE_LABELS } from '@/lib/constants';
+import { getVisibilityState } from '@/lib/base44Workflows';
 import { AlertCircle, Bookmark, CheckCircle, Clock, Pencil, Plus, Search } from 'lucide-react';
 
 const CONFIDENCE_COLORS = {
@@ -37,6 +41,7 @@ export default function MarkerReview() {
   const [filters, setFilters] = useState({ projectId: 'all', sessionId: 'all', mediaId: 'all', confidence: 'all', visibility: 'all', search: '' });
   const queryClient = useQueryClient();
   const { data: instructions = [] } = usePageInstructions('marker_review');
+  const { isDocumenter } = useUserProfile();
 
   const { data: markers = [], isLoading } = useQuery({ queryKey: ['markers'], queryFn: () => base44.entities.MediaMarker.list('-created_date', 200) });
   const { data: mediaFiles = [] } = useQuery({ queryKey: ['media-files'], queryFn: () => base44.entities.MediaFile.list('-created_date', 200) });
@@ -86,8 +91,20 @@ export default function MarkerReview() {
   return (
     <div className="space-y-6">
       <PageHeader title="Marker Review" description="Validate timeline markers against media, checkpoints, and asset context before project publication.">
-        <Button size="sm" className="gap-2" onClick={() => { setForm(emptyMarker); setShowForm(true); }}><Plus className="w-4 h-4" /> Add Marker</Button>
+        {!isDocumenter && <Button size="sm" className="gap-2" onClick={() => { setForm(emptyMarker); setShowForm(true); }}><Plus className="w-4 h-4" /> Add Marker</Button>}
       </PageHeader>
+
+      <PermissionNotice
+        audience={[
+          'Super Admin and Company Admin can create, validate, and publish-ready markers.',
+          'Documenters may review scoped evidence but should avoid exposing internal QA content or changing publication intent unless directed.',
+          'Client users never access this page.',
+        ]}
+        internalData="Validation status, confidence levels, internal notes, and reviewer reasoning are all internal operational data."
+        clientVisibleData="Only markers explicitly marked Client Visible and later published through the project workflow appear in the client portal."
+        publishingEffect="Publishing does not automatically clean marker language. Each marker still needs a deliberate visibility state and client-safe note."
+        mistakesToAvoid="Do not leave draft notes in client-visible text, and do not turn on client visibility before timestamps and labels are confirmed."
+      />
 
       <OperatingGuide
         title="Marker Review Guide"
@@ -156,7 +173,7 @@ export default function MarkerReview() {
                                 <Badge variant="outline">{MARKER_TYPE_LABELS[marker.marker_type] || marker.marker_type}</Badge>
                                 <Badge className={CONFIDENCE_COLORS[marker.confidence_level] || ''}>{marker.confidence_level === 'confirmed' ? <CheckCircle className="w-3 h-3 mr-1" /> : marker.confidence_level === 'estimated' ? <AlertCircle className="w-3 h-3 mr-1" /> : null}{marker.confidence_level}</Badge>
                                 <Badge variant="secondary">{marker.validation_status || 'pending_review'}</Badge>
-                                <Badge variant={marker.is_client_visible ? 'default' : 'secondary'}>{marker.is_client_visible ? 'Client visible' : 'Internal only'}</Badge>
+                                <VisibilityBadge visibility={getVisibilityState(marker)} />
                               </div>
                               <p className="text-sm text-muted-foreground flex items-center gap-2"><Clock className="w-4 h-4" /> {formatTimestamp(marker.timestamp_seconds)}</p>
                               <div className="grid gap-2 md:grid-cols-2">
@@ -170,7 +187,7 @@ export default function MarkerReview() {
                                 </div>
                               </div>
                               {marker.client_visible_notes && <p className="text-sm text-muted-foreground leading-6">Client note: {marker.client_visible_notes}</p>}
-                              {marker.internal_notes && <p className="text-sm text-muted-foreground leading-6">Internal note: {marker.internal_notes}</p>}
+                              {!isDocumenter && marker.internal_notes && <p className="text-sm text-muted-foreground leading-6">Internal note: {marker.internal_notes}</p>}
                             </div>
                             <Button variant="ghost" size="icon" onClick={() => openEdit(marker)}><Pencil className="w-4 h-4" /></Button>
                           </div>
@@ -196,6 +213,7 @@ export default function MarkerReview() {
             { title: 'Validation status discipline', description: 'Use pending, needs_revision, or confirmed style statuses consistently so dashboards reflect true readiness.' },
           ]} />
           <VisibilityRulesPanel rules={[
+            ...VISIBILITY_EXPLANATIONS.map((rule) => ({ title: rule.label, description: rule.description })),
             { title: 'Manual vs estimated vs confirmed', description: 'Manual = directly placed by staff, estimated = inferred from route/session timing, confirmed = verified by a reviewer against actual media.' },
             { title: 'Client note hygiene', description: 'Client-visible notes must not mention uncertainty, internal process language, or reviewer disagreements.' },
           ]} />
@@ -224,8 +242,8 @@ export default function MarkerReview() {
               <div><Label>Checkpoint Reference</Label><Input value={form.checkpoint_reference || ''} onChange={(event) => setForm((current) => ({ ...current, checkpoint_reference: event.target.value }))} placeholder="Route checkpoint label or ID" /></div>
               <div><Label>Asset Location Reference</Label><Input value={form.asset_location_reference || ''} onChange={(event) => setForm((current) => ({ ...current, asset_location_reference: event.target.value }))} placeholder="Asset label or location ID" /></div>
             </div>
-            <div className="flex items-center justify-between rounded-lg border px-3 py-2"><div><p className="text-sm font-medium">Client visible</p><p className="text-xs text-muted-foreground">Keep off until marker content is confirmed and client-safe.</p></div><Switch checked={!!form.is_client_visible} onCheckedChange={(checked) => setForm((current) => ({ ...current, is_client_visible: checked }))} /></div>
-            <div><Label>Internal Notes</Label><Textarea value={form.internal_notes || ''} onChange={(event) => setForm((current) => ({ ...current, internal_notes: event.target.value }))} /></div>
+            <div className="rounded-lg border p-3 space-y-3"><div className="flex items-center justify-between"><div><p className="text-sm font-medium">Visibility state</p><p className="text-xs text-muted-foreground">Internal Only = company-side, Client Visible = portal-safe, Needs Review = draft client text exists but is not yet approved.</p></div><Switch checked={!!form.is_client_visible} onCheckedChange={(checked) => setForm((current) => ({ ...current, is_client_visible: checked }))} /></div><div className="flex gap-2 flex-wrap"><VisibilityBadge visibility={form.is_client_visible ? 'client_visible' : (form.client_visible_notes ? 'needs_review' : 'internal_only')} /></div></div>
+            {!isDocumenter && <div><Label>Internal Notes</Label><Textarea value={form.internal_notes || ''} onChange={(event) => setForm((current) => ({ ...current, internal_notes: event.target.value }))} /></div>}
             <div><Label>Client-visible Notes</Label><Textarea value={form.client_visible_notes || ''} onChange={(event) => setForm((current) => ({ ...current, client_visible_notes: event.target.value }))} /></div>
           </div>
           <DialogFooter><Button variant="outline" onClick={closeForm}>Cancel</Button><Button onClick={handleSave} disabled={!form.marker_label || !form.media_file_id}>Save Marker</Button></DialogFooter>
