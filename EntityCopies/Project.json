@@ -1,0 +1,99 @@
+{
+  "name": "Project",
+  "type": "object",
+  "properties": {
+    "client_organization_id": {
+      "type": "string"
+    },
+    "project_name": {
+      "type": "string"
+    },
+    "project_code": {
+      "type": "string"
+    },
+    "contract_number": {
+      "type": "string"
+    },
+    "municipality": {
+      "type": "string"
+    },
+    "county": {
+      "type": "string"
+    },
+    "state": {
+      "type": "string"
+    },
+    "project_status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "active",
+        "in_review",
+        "published",
+        "archived"
+      ],
+      "default": "draft"
+    },
+    "documentation_status": {
+      "type": "string",
+      "enum": [
+        "not_started",
+        "scheduled",
+        "in_progress",
+        "uploaded",
+        "reviewed",
+        "published"
+      ],
+      "default": "not_started"
+    },
+    "projected_start_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "documentation_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "project_type": {
+      "type": "string"
+    },
+    "work_scope_summary": {
+      "type": "string"
+    },
+    "project_limits_description": {
+      "type": "string"
+    },
+    "address_range_summary": {
+      "type": "string"
+    },
+    "include_photos": {
+      "type": "boolean",
+      "default": true
+    },
+    "include_standard_video": {
+      "type": "boolean",
+      "default": true
+    },
+    "include_360_video": {
+      "type": "boolean",
+      "default": false
+    },
+    "published_to_client": {
+      "type": "boolean",
+      "default": false
+    },
+    "client_portal_summary": {
+      "type": "string"
+    },
+    "internal_notes": {
+      "type": "string"
+    },
+    "client_visible_notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_name",
+    "project_code"
+  ]
+}
