@@ -16,6 +16,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Badge } from '@/components/ui/badge';
 import { Plus, FileVideo, Search, Image, Video, File } from 'lucide-react';
 import { VIEW_TYPE_LABELS } from '@/lib/constants';
+import FutureReadyPanel from '@/components/ui/FutureReadyPanel';
+import { createViewerCapabilityMatrix, getStorageAdapterBlueprints } from '@/lib/futureArchitecture';
 
 const MEDIA_TYPES = ['photo', 'video', 'video_360', 'thumbnail', 'preview_clip', 'document', 'export'];
 const MEDIA_ICONS = { photo: Image, video: Video, video_360: Video, thumbnail: Image, preview_clip: Video, document: File, export: File };
@@ -61,6 +63,8 @@ export default function MediaLibrary() {
   const projectMap = {};
   projects.forEach(p => { projectMap[p.id] = p.project_name; });
 
+  const storageBlueprints = getStorageAdapterBlueprints();
+
   const filtered = mediaFiles.filter(m => {
     const matchSearch = m.media_title?.toLowerCase().includes(search.toLowerCase()) || m.original_filename?.toLowerCase().includes(search.toLowerCase());
     const matchType = typeFilter === 'all' || m.media_type === typeFilter;
@@ -75,12 +79,39 @@ export default function MediaLibrary() {
       </PageHeader>
 
       <HowThisWorks items={[
+        "Keep metadata complete even when a future viewer or storage integration does not exist yet; those extension layers will depend on the same project, session, segment, and publish fields already used today.",
         "Register media files by providing metadata — either upload natively or link to external storage.",
         "Each media file should be linked to a project, segment, and capture session for proper organization.",
         "Set view type, direction, and side of street to enable structured browsing.",
         "Toggle 'Publish to Client' to make specific media visible in the client portal.",
         "Future versions will support batch upload, automated processing, and AI-assisted tagging."
       ]} />
+
+
+      <FutureReadyPanel
+        title="Media future-ready areas"
+        description="These placeholders keep media registration compatible with future 360 viewing and large-file storage adapters while preserving the current in-house-first workflow."
+        items={[
+          {
+            key: 'viewer360',
+            title: '360 viewer extension point',
+            status: 'Placeholder only',
+            summary: '360-capable records are identified through the same media metadata used today. A future renderer should ask a shared capability helper which viewer family to load instead of adding one-off conditionals throughout the UI.',
+            workflow: 'Project requirements define whether 360 capture matters, Media Library stores the asset, and future viewers attach after normal QA and publishing decisions are complete.',
+            entities: ['Project', 'CaptureSession', 'MediaFile'],
+            extensionPoints: filtered.slice(0, 2).map((media) => createViewerCapabilityMatrix(media).adminExplanation),
+          },
+          {
+            key: 'storageAdapters',
+            title: 'External storage adapter extension point',
+            status: 'In-house-first',
+            summary: 'Large media should continue to register into the same MediaFile record shape, while storage adapters remain declarative metadata rather than bespoke page logic.',
+            workflow: 'Administrators register a media record, pick the storage mode, and keep publish/review rules in the application even if raw bytes live elsewhere later.',
+            entities: ['MediaFile', 'CaptureSession', 'Project'],
+            extensionPoints: storageBlueprints.map((adapter) => `${adapter.label}: ${adapter.adminNotes}`),
+          },
+        ]}
+      />
 
       <div className="flex items-center gap-3 mb-4 flex-wrap">
         <div className="relative flex-1 max-w-sm">
@@ -161,8 +192,19 @@ export default function MediaLibrary() {
                 </Select>
               </div>
             </div>
+            <div><Label>Storage Mode</Label>
+                <Select value={form.storage_mode} onValueChange={v => setForm({ ...form, storage_mode: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{storageBlueprints.map(adapter => <SelectItem key={adapter.key} value={adapter.key}>{adapter.label}</SelectItem>)}</SelectContent>
+                </Select>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">Choose Base44 Native Upload for today. The future adapter options document where large media integrations will plug in without changing the current review or publishing workflow.</p>
+            </div>
             <div><Label>File URL</Label><Input value={form.file_url} onChange={e => setForm({ ...form, file_url: e.target.value })} placeholder="https://..." /></div>
             <div><Label>Thumbnail URL</Label><Input value={form.thumbnail_url} onChange={e => setForm({ ...form, thumbnail_url: e.target.value })} /></div>
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <p className="text-sm font-medium">Admin note: future-ready media record</p>
+              <p className="text-xs leading-5 text-muted-foreground">This form intentionally keeps 360 support and external storage as metadata-driven placeholders. Complete project, segment, session, media type, view type, and storage mode fields now so future viewers, sync services, and adapters can integrate without changing your media inventory.</p>
+            </div>
             <div className="flex items-center gap-6">
               <div className="flex items-center gap-2"><Switch checked={form.publish_to_client} onCheckedChange={v => setForm({ ...form, publish_to_client: v })} /><Label>Publish to Client</Label></div>
               <div className="flex items-center gap-2"><Switch checked={form.is_primary_for_segment} onCheckedChange={v => setForm({ ...form, is_primary_for_segment: v })} /><Label>Primary for Segment</Label></div>

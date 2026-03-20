@@ -39,6 +39,7 @@ export const VIEW_TYPE_LABELS = {
   curb_line_edge_of_pavement: 'Curb Line / Edge of Pavement',
   cross_section: 'Cross Section',
   '360_walk': '360° Walk',
+  video_360_stationary: '360° Stationary View',
   reverse_view: 'Reverse View',
   custom: 'Custom View',
 };

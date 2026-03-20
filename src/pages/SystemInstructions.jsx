@@ -13,9 +13,11 @@ import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { BookOpen, Pencil, Plus } from 'lucide-react';
+import FutureReadyPanel from '@/components/ui/FutureReadyPanel';
+import { getFutureFeatureBlueprints } from '@/lib/futureArchitecture';
 
-const CATEGORIES = ['workflow', 'data_entry', 'qa', 'publishing', 'client_portal', 'mapping', 'media', 'security'];
-const PAGE_KEYS = ['all', 'dashboard', 'route_editor', 'field_session', 'marker_review', 'project_detail', 'client_project_viewer'];
+const CATEGORIES = ['workflow', 'data_entry', 'qa', 'publishing', 'client_portal', 'mapping', 'media', 'security', 'architecture'];
+const PAGE_KEYS = ['all', 'dashboard', 'route_editor', 'field_session', 'marker_review', 'project_detail', 'media_library', 'system_instructions', 'client_project_viewer'];
 const ROLES = ['all', 'super_admin', 'company_admin', 'documenter', 'client_manager', 'client_viewer'];
 
 const emptyInstruction = { instruction_key: '', instruction_title: '', instruction_category: 'workflow', instruction_body: '', target_page: 'all', target_role: 'all', is_active: true, sort_order: 0 };
@@ -31,6 +33,7 @@ export default function SystemInstructions() {
   const updateMut = useMutation({ mutationFn: ({ id, data }) => base44.entities.SystemInstruction.update(id, data), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['instructions'] }); closeForm(); } });
 
   const grouped = useMemo(() => instructions.reduce((accumulator, instruction) => { const category = instruction.instruction_category || 'workflow'; accumulator[category] ||= []; accumulator[category].push(instruction); return accumulator; }, {}), [instructions]);
+  const futureBlueprints = useMemo(() => getFutureFeatureBlueprints(), []);
   const closeForm = () => { setShowForm(false); setEditing(null); setForm(emptyInstruction); };
   const openEdit = (instruction) => { setEditing(instruction); setForm({ ...emptyInstruction, ...instruction }); setShowForm(true); };
   const handleSave = () => editing ? updateMut.mutate({ id: editing.id, data: form }) : createMut.mutate(form);
@@ -41,7 +44,13 @@ export default function SystemInstructions() {
         <Button size="sm" className="gap-2" onClick={() => { setForm(emptyInstruction); setShowForm(true); }}><Plus className="w-4 h-4" /> Add Instruction</Button>
       </PageHeader>
 
-      <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground leading-6">Use this page to maintain professional instructional content for internal staff and client viewers. Each instruction can target a page, a role, or all users, making it easier to update operating guidance without rewriting page code.</p></CardContent></Card>
+      <Card><CardContent className="p-4 space-y-3"><p className="text-sm text-muted-foreground leading-6">Use this page to maintain professional instructional content for internal staff and client viewers. Each instruction can target a page, a role, or all users, making it easier to update operating guidance without rewriting page code.</p><p className="text-sm text-muted-foreground leading-6">Future-ready architecture notes should be stored as practical operating content: explain where the extension hooks live, which current entities they rely on, and what remains intentionally unimplemented so future phases can move quickly without surprising administrators.</p></CardContent></Card>
+
+      <FutureReadyPanel
+        title="Future Features / Extension Notes"
+        description="Use these architecture notes as the source of truth when adding system instructions for the next product phase. They describe where new capabilities should plug into the current in-house-first workflow without forcing premature implementation."
+        items={futureBlueprints}
+      />
 
       {isLoading ? <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-muted border-t-primary rounded-full animate-spin" /></div> : instructions.length === 0 ? <EmptyState icon={BookOpen} title="No instructions yet" description="Create role-aware instructions so major pages can render operational guidance from data." /> : (
         <div className="space-y-6">{Object.entries(grouped).map(([category, items]) => (

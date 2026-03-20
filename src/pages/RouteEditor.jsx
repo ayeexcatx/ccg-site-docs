@@ -13,8 +13,10 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { DocumentationPageIntro, QAReviewChecklist, VisibilityRulesPanel, WorkflowStepsPanel, InstructionPanel } from '@/components/ui/OperatingGuidance';
+import FutureReadyPanel from '@/components/ui/FutureReadyPanel';
 import { addRouteCheckpoint, reorderRouteCheckpoints, saveDrawnRoutePath } from '@/lib/base44Workflows';
 import { getRoutePathSummary, orderCheckpoints } from '@/lib/domainWorkflows';
+import { buildRouteMediaSyncEnvelope } from '@/lib/futureArchitecture';
 import { usePageInstructions } from '@/hooks/usePageInstructions';
 import { CHECKPOINT_TYPE_LABELS } from '@/lib/constants';
 import { AlertTriangle, ArrowDown, ArrowUp, GripVertical, MapPin, Plus, Save, Trash2 } from 'lucide-react';
@@ -227,6 +229,7 @@ export default function RouteEditor() {
   const segmentSessions = useMemo(() => sessions.filter((session) => (!routeState.projectId || session.project_id === routeState.projectId) && (!routeState.segmentId || session.street_segment_id === routeState.segmentId)), [sessions, routeState.projectId, routeState.segmentId]);
   const selectedSession = useMemo(() => sessions.find((session) => session.id === routeState.sessionId), [sessions, routeState.sessionId]);
   const routeSummary = useMemo(() => getRoutePathSummary(routeState.routePoints, routeState.checkpoints), [routeState.routePoints, routeState.checkpoints]);
+  const syncEnvelope = useMemo(() => buildRouteMediaSyncEnvelope({ route: routes[0], checkpoints: routeState.checkpoints, session: selectedSession }), [routes, routeState.checkpoints, selectedSession]);
 
   useEffect(() => {
     if (!selectedSession) return;
@@ -374,6 +377,20 @@ export default function RouteEditor() {
             { heading: 'Future-ready Design', body: 'Keep checkpoint labels objective and route geometry accurate so future additions such as 360 viewer overlays, map-video sync, and AI-assisted tagging can reuse the same route spine.' },
           ],
         }}
+      />
+
+      <FutureReadyPanel
+        title="Route and map-video sync extension notes"
+        description="Route geometry and checkpoint ordering are the canonical inputs for future map-video alignment. This panel describes the intended contract without calculating real sync output yet."
+        items={[{
+          key: 'mapVideoSync',
+          title: 'Map-video sync placeholder',
+          status: syncEnvelope.status,
+          summary: `Prepared sync envelope for session ${syncEnvelope.captureSessionId || 'unassigned'} with ${syncEnvelope.routePointCount} route points and ${syncEnvelope.checkpointIds.length} saved checkpoint references.`,
+          workflow: 'Capture teams define the route first, then attach session media, and future sync services compute timestamp alignment only after both are stable.',
+          entities: ['RoutePath', 'RouteCheckpoint', 'CaptureSession', 'MediaFile', 'MediaMarker'],
+          extensionPoints: syncEnvelope.futureComputationNotes,
+        }]}
       />
 
       <div className="grid gap-6 xl:grid-cols-[1.8fr_1fr]">

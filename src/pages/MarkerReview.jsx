@@ -15,11 +15,13 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { DocumentationPageIntro, QAReviewChecklist, VisibilityRulesPanel, WorkflowStepsPanel, InstructionPanel } from '@/components/ui/OperatingGuidance';
+import FutureReadyPanel from '@/components/ui/FutureReadyPanel';
 import { usePageInstructions } from '@/hooks/usePageInstructions';
 import { useUserProfile } from '@/lib/useUserProfile';
 import { MARKER_TYPE_LABELS } from '@/lib/constants';
 import { getVisibilityState } from '@/lib/base44Workflows';
 import { getMarkerConfidenceLabel, getMarkerReviewSummary } from '@/lib/domainWorkflows';
+import { buildMarkerSuggestionContext } from '@/lib/futureArchitecture';
 import { AlertCircle, Bookmark, CheckCircle, Clock, Pencil, Plus, Search } from 'lucide-react';
 import { formatTimestamp } from '@/lib/displayUtils';
 
@@ -60,6 +62,7 @@ export default function MarkerReview() {
   const handleSave = () => editing ? updateMut.mutate({ id: editing.id, data: form }) : createMut.mutate(form);
 
   const markerReviewSummary = useMemo(() => getMarkerReviewSummary({ markers, mediaFiles, projects, sessions, checkpoints, assetLocations, filters }), [markers, mediaFiles, projects, sessions, checkpoints, assetLocations, filters]);
+  const suggestionContext = useMemo(() => buildMarkerSuggestionContext({ checkpoints, assetLocations, mediaFile: mediaFiles[0], marker: markers[0] }), [checkpoints, assetLocations, mediaFiles, markers]);
   const { groupedByMedia, projectMap, sessionMap, checkpointMap, assetMap } = markerReviewSummary;
 
   return (
@@ -101,6 +104,20 @@ export default function MarkerReview() {
         }}
       />
 
+      <FutureReadyPanel
+        title="AI-assisted tagging extension notes"
+        description="These guardrails prepare Marker Review for internal AI suggestions without replacing the current reviewer-controlled workflow."
+        items={[{
+          key: 'aiTagging',
+          title: 'AI-assisted marker suggestions',
+          status: suggestionContext.suggestionStatus,
+          summary: `The suggestion contract is ready to accept draft machine-generated markers for media ${suggestionContext.mediaFileId || 'not yet selected'} using ${suggestionContext.nearbyCheckpointCount} checkpoint references and ${suggestionContext.nearbyAssetCount} asset references.`,
+          workflow: 'Future AI services should propose markers as draft evidence, reviewers should compare them with route/media context, and only confirmed markers should move into publication workflows.',
+          entities: ['MediaMarker', 'MediaFile', 'RouteCheckpoint', 'AssetLocation'],
+          extensionPoints: suggestionContext.reviewerGuardrails,
+        }]}
+      />
+
       <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         <div className="space-y-4">
           <Card>
@@ -114,7 +131,7 @@ export default function MarkerReview() {
                 ['Project', 'projectId', projects.map((project) => [project.id, project.project_name])],
                 ['Session', 'sessionId', sessions.map((session) => [session.id, session.session_name])],
                 ['Media File', 'mediaId', mediaFiles.map((media) => [media.id, media.media_title])],
-                ['Confidence', 'confidence', [['manual', 'Manual'], ['estimated', 'Estimated'], ['confirmed', 'Confirmed']]],
+                ['Confidence', 'confidence', [['manual', 'Manual'], ['estimated', 'Estimated'], ['confirmed', 'Confirmed'], ['ai_suggested_future', 'AI Suggested (Future)']]],
                 ['Visibility', 'visibility', [['client_visible', 'Client Visible'], ['internal_only', 'Internal Only']]],
               ].map(([label, key, options]) => (
                 <div key={key}>
@@ -210,7 +227,7 @@ export default function MarkerReview() {
             </div>
             <div className="grid gap-3 md:grid-cols-3">
               <div><Label>Type</Label><Select value={form.marker_type} onValueChange={(value) => setForm((current) => ({ ...current, marker_type: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Object.entries(MARKER_TYPE_LABELS).map(([key, label]) => <SelectItem key={key} value={key}>{label}</SelectItem>)}</SelectContent></Select></div>
-              <div><Label>Confidence</Label><Select value={form.confidence_level} onValueChange={(value) => setForm((current) => ({ ...current, confidence_level: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="manual">Manual</SelectItem><SelectItem value="estimated">Estimated</SelectItem><SelectItem value="confirmed">Confirmed</SelectItem></SelectContent></Select></div>
+              <div><Label>Confidence</Label><Select value={form.confidence_level} onValueChange={(value) => setForm((current) => ({ ...current, confidence_level: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="manual">Manual</SelectItem><SelectItem value="estimated">Estimated</SelectItem><SelectItem value="confirmed">Confirmed</SelectItem><SelectItem value="ai_suggested_future">AI Suggested (Future)</SelectItem></SelectContent></Select><p className="mt-1 text-xs leading-5 text-muted-foreground">Use the AI Suggested (Future) state only for clearly labeled draft suggestions once an approved internal provider exists. It is intentionally not a publication-ready state.</p></div>
               <div><Label>Timestamp (seconds)</Label><Input type="number" value={form.timestamp_seconds} onChange={(event) => setForm((current) => ({ ...current, timestamp_seconds: parseFloat(event.target.value) || 0 }))} /></div>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
