@@ -1,0 +1,53 @@
+{
+  "name": "UserProfile",
+  "type": "object",
+  "properties": {
+    "user_id": {
+      "type": "string",
+      "description": "Links to the built-in User entity id"
+    },
+    "full_name": {
+      "type": "string"
+    },
+    "email": {
+      "type": "string"
+    },
+    "role": {
+      "type": "string",
+      "enum": [
+        "super_admin",
+        "company_admin",
+        "documenter",
+        "client_manager",
+        "client_viewer"
+      ],
+      "default": "client_viewer"
+    },
+    "client_organization_id": {
+      "type": "string",
+      "description": "Linked client org ID, null for company-side users"
+    },
+    "job_title": {
+      "type": "string"
+    },
+    "phone": {
+      "type": "string"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    },
+    "helper_preferences_json": {
+      "type": "string",
+      "description": "JSON string of user UI preferences"
+    },
+    "internal_notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "full_name",
+    "email",
+    "role"
+  ]
+}
