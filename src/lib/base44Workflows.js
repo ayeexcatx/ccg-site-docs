@@ -136,41 +136,97 @@ export async function syncMarkersFromRouteAndDuration({ checkpoints = [], mediaF
   return Promise.all(operations);
 }
 
+export function getVisibilityState(record = {}, clientField = 'client_visible_notes', internalField = 'internal_notes', visibleFlag = 'is_client_visible') {
+  if (record[visibleFlag]) return 'client_visible';
+  if (record[clientField] && !record[visibleFlag]) return 'needs_review';
+  if (record[internalField]) return 'internal_only';
+  return 'needs_review';
+}
+
 export function validateProjectReadiness({ project, segments = [], sessions = [], media = [], markers = [], routes = [] }) {
+  const requiredViewTypes = [
+    project?.include_photos && 'profile',
+    project?.include_standard_video && 'cross_section',
+    project?.include_360_video && '360_walk',
+  ].filter(Boolean);
+  const viewTypesPresent = requiredViewTypes.filter((type) => media.some((item) => item.view_type === type));
+  const uploadedSessions = sessions.filter((session) => ['uploaded', 'under_review', 'approved', 'published'].includes(session.session_status));
+  const completeSessions = sessions.filter((session) => ['approved', 'published'].includes(session.session_status));
+  const mediaAttached = media.filter((item) => !!item.file_url || !!item.thumbnail_url);
+  const reviewedMarkers = markers.filter((marker) => marker.confidence_level === 'confirmed');
+  const clientSafeMarkers = markers.filter((marker) => getVisibilityState(marker) === 'client_visible');
+  const notesValidated = !project?.client_visible_notes || !/todo|tbd|draft|internal/i.test(project.client_visible_notes);
   const routeCoverage = segments.length ? routes.length / segments.length : 0;
   const sessionCoverage = segments.length ? sessions.length / segments.length : 0;
-  const uploadedSessions = sessions.filter((session) => ['uploaded', 'under_review', 'approved'].includes(session.session_status)).length;
-  const reviewedMarkers = markers.filter((marker) => marker.confidence_level === 'confirmed').length;
+
+  const checks = [
+    { key: 'segments', label: 'Required segments present', ready: segments.length > 0, reason: segments.length ? `${segments.length} scoped segments loaded.` : 'Add at least one segment before publishing.' },
+    { key: 'view_types', label: 'Required view types present', ready: requiredViewTypes.every((type) => viewTypesPresent.includes(type)), reason: requiredViewTypes.length ? `${viewTypesPresent.length}/${requiredViewTypes.length} required view types are covered.` : 'Project view requirements are not yet defined.' },
+    { key: 'sessions', label: 'Sessions complete', ready: sessions.length > 0 && completeSessions.length === sessions.length, reason: sessions.length ? `${completeSessions.length}/${sessions.length} sessions are approved or published.` : 'Create and complete at least one capture session.' },
+    { key: 'media', label: 'Media attached', ready: mediaAttached.length > 0, reason: mediaAttached.length ? `${mediaAttached.length} media records have client-deliverable files or thumbnails.` : 'Attach media assets before publishing.' },
+    { key: 'markers', label: 'Markers reviewed', ready: markers.length > 0 && reviewedMarkers.length === markers.length, reason: markers.length ? `${reviewedMarkers.length}/${markers.length} markers are confirmed.` : 'Add and review markers before publishing.' },
+    { key: 'notes', label: 'Client-visible notes validated', ready: notesValidated && clientSafeMarkers.length >= 0, reason: notesValidated ? 'Client-facing notes do not include draft/internal language.' : 'Client-visible notes contain draft/internal wording that must be cleaned up.' },
+  ];
+
+  const blockers = checks.filter((check) => !check.ready).map((check) => `${check.label}: ${check.reason}`);
 
   return {
     routeCompleteness: Math.min(100, Math.round(routeCoverage * 100)),
     sessionCompleteness: Math.min(100, Math.round(sessionCoverage * 100)),
-    uploadReadiness: uploadedSessions === sessions.length && sessions.length > 0,
-    reviewReadiness: reviewedMarkers >= Math.max(1, Math.floor(markers.length * 0.6)),
-    publishReadiness: !!project?.published_to_client || (uploadedSessions === sessions.length && reviewedMarkers === markers.length && media.length > 0),
+    uploadReadiness: uploadedSessions.length === sessions.length && sessions.length > 0,
+    reviewReadiness: reviewedMarkers.length >= Math.max(1, Math.floor(markers.length * 0.6 || 1)),
+    publishReadiness: checks.every((check) => check.ready),
+    checklist: checks,
+    blockers,
+    summary: {
+      requiredViewTypes,
+      viewTypesPresent,
+      completeSessions: completeSessions.length,
+      totalSessions: sessions.length,
+      reviewedMarkers: reviewedMarkers.length,
+      totalMarkers: markers.length,
+      mediaAttached: mediaAttached.length,
+    },
   };
 }
 
-export async function getRoleAwareDashboardData({ role }) {
-  const [projects, sessions, mediaFiles, reviewCases, clients] = await Promise.all([
+export async function getRoleAwareDashboardData({ role, profile }) {
+  const [projects, sessions, mediaFiles, reviewCases, clients, markers] = await Promise.all([
     safeList('Project', '-created_date', 50),
-    safeList('CaptureSession', '-created_date', 20),
-    safeList('MediaFile', '-created_date', 50),
-    safeList('ReviewCase', '-created_date', 20),
+    safeList('CaptureSession', '-created_date', 50),
+    safeList('MediaFile', '-created_date', 100),
+    safeList('ReviewCase', '-created_date', 50),
     safeList('ClientOrganization', '-created_date', 50),
+    safeList('MediaMarker', '-created_date', 100),
   ]);
 
   if (['client_manager', 'client_viewer'].includes(role)) {
+    const scopedProjects = projects.filter((project) => project.published_to_client && (!profile?.client_organization_id || project.client_organization_id === profile.client_organization_id));
+    const scopedReviewCases = reviewCases.filter((item) => item.client_organization_id && item.client_organization_id === profile?.client_organization_id);
     return {
-      projects: projects.filter((project) => project.published_to_client),
+      projects: scopedProjects,
       sessions: [],
-      mediaFiles: [],
-      reviewCases: [],
-      clients: [],
+      mediaFiles: mediaFiles.filter((file) => scopedProjects.some((project) => project.id === file.project_id) && file.publish_to_client),
+      reviewCases: scopedReviewCases,
+      clients: clients.filter((client) => client.id === profile?.client_organization_id),
+      markers: markers.filter((marker) => marker.is_client_visible && scopedProjects.some((project) => project.id === marker.project_id)),
     };
   }
 
-  return { projects, sessions, mediaFiles, reviewCases, clients };
+  if (role === 'documenter') {
+    const scopedSessions = sessions.filter((session) => session.assigned_documenter_id === profile?.id);
+    const projectIds = new Set(scopedSessions.map((session) => session.project_id));
+    return {
+      projects: projects.filter((project) => projectIds.has(project.id)),
+      sessions: scopedSessions,
+      mediaFiles: mediaFiles.filter((file) => projectIds.has(file.project_id)),
+      reviewCases: reviewCases.filter((item) => projectIds.has(item.project_id)),
+      clients: clients,
+      markers: markers.filter((marker) => projectIds.has(marker.project_id)),
+    };
+  }
+
+  return { projects, sessions, mediaFiles, reviewCases, clients, markers };
 }
 
 export async function loadSystemInstructionsForPage({ pageKey, role }) {

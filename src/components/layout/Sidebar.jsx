@@ -7,21 +7,22 @@ import {
 } from 'lucide-react';
 import { useUserProfile } from '@/lib/useUserProfile';
 import { cn } from '@/lib/utils';
+import { getRoleLabel } from '@/lib/roleUtils';
 
 const companyNavItems = [
   { label: 'Dashboard', path: '/', icon: LayoutDashboard },
-  { label: 'Clients', path: '/clients', icon: Building2 },
-  { label: 'Users', path: '/users', icon: Users },
+  { label: 'Clients', path: '/clients', icon: Building2, roles: ['super_admin', 'company_admin', 'client_manager'] },
+  { label: 'Users', path: '/users', icon: Users, roles: ['super_admin', 'company_admin'] },
   { label: 'Projects', path: '/projects', icon: FolderOpen },
-  { label: 'Street Segments', path: '/segments', icon: MapPin },
+  { label: 'Street Segments', path: '/segments', icon: MapPin, roles: ['super_admin', 'company_admin'] },
   { label: 'Capture Sessions', path: '/sessions', icon: Camera },
-  { label: 'Route Editor', path: '/routes', icon: Route },
+  { label: 'Route Editor', path: '/routes', icon: Route, roles: ['super_admin', 'company_admin'] },
   { label: 'Field Session', path: '/field', icon: Shield },
   { label: 'Media Library', path: '/media', icon: FileVideo },
   { label: 'Marker Review', path: '/markers', icon: Bookmark },
-  { label: 'Asset Locations', path: '/assets', icon: MapPinned },
-  { label: 'Review Cases', path: '/reviews', icon: MessageSquare },
-  { label: 'System Instructions', path: '/instructions', icon: BookOpen },
+  { label: 'Asset Locations', path: '/assets', icon: MapPinned, roles: ['super_admin', 'company_admin'] },
+  { label: 'Review Cases', path: '/reviews', icon: MessageSquare, roles: ['super_admin', 'company_admin', 'client_manager'] },
+  { label: 'System Instructions', path: '/instructions', icon: BookOpen, roles: ['super_admin', 'company_admin'] },
 ];
 
 const clientNavItems = [
@@ -32,9 +33,9 @@ const clientNavItems = [
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
-  const { isCompanyUser, isClientUser, profile } = useUserProfile();
+  const { isClientUser, profile } = useUserProfile();
 
-  const navItems = isClientUser ? clientNavItems : companyNavItems;
+  const navItems = (isClientUser ? clientNavItems : companyNavItems).filter((item) => !item.roles || item.roles.includes(profile?.role));
 
   return (
     <aside className={cn(
@@ -82,7 +83,7 @@ export default function Sidebar() {
         {!collapsed && profile && (
           <div className="px-3 py-2 mb-1">
             <p className="text-xs font-medium truncate">{profile.full_name}</p>
-            <p className="text-[10px] text-sidebar-foreground/60 truncate">{profile.role?.replace(/_/g, ' ')}</p>
+            <p className="text-[10px] text-sidebar-foreground/60 truncate">{getRoleLabel(profile.role)}</p>
           </div>
         )}
         <button
