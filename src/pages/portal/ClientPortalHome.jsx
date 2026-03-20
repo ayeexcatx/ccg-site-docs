@@ -4,6 +4,7 @@ import { base44 } from '@/api/base44Client';
 import { Link } from 'react-router-dom';
 import PageHeader from '@/components/ui/PageHeader';
 import EmptyState from '@/components/ui/EmptyState';
+import { DocumentationPageIntro } from '@/components/ui/OperatingGuidance';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { FolderOpen, Search, ArrowRight, Eye } from 'lucide-react';
@@ -34,6 +35,23 @@ export default function ClientPortalHome() {
       </div>
 
       <PageHeader title="Your Projects" description="Browse published pre-construction documentation for your projects. Search by project name, street, or municipality." />
+
+      <DocumentationPageIntro
+        header={{
+          title: 'Client Portal Overview',
+          purpose: 'This portal home page is the entry point for reviewing published project packages that CCG has already approved for client access.',
+          role: 'Client Managers and Client Viewers use this page to locate the right published project without seeing internal operational workflow data.',
+          workflowSummary: 'Search published projects, open the correct project viewer, then review segments, media, and approved markers inside the client-safe package.',
+          visibilityRules: 'Only published projects appear here. Internal notes, QA commentary, and unpublished deliverables stay outside the client portal.',
+          nextSteps: 'Open a project card to review the published package in more detail or contact CCG if expected content is still under internal review.'
+        }}
+        guide={{
+          title: 'Client Portal Guidance',
+          sections: [
+            { heading: 'How It Works', body: 'This page lists only records intentionally released through the current CCG publication workflow, preserving the existing internal/client split.' },
+          ],
+        }}
+      />
 
       <div className="flex items-center gap-3 mb-6">
         <div className="relative flex-1 max-w-md">

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Badge } from '@/components/ui/badge';
+import { getVisibilityLabel } from '@/lib/displayUtils';
 
 const VARIANTS = {
   internal_only: 'bg-slate-200 text-slate-800',
@@ -15,7 +16,7 @@ const LABELS = {
 
 export default function VisibilityBadge({ visibility }) {
   if (!visibility) return null;
-  return <Badge className={VARIANTS[visibility] || 'bg-muted text-muted-foreground'}>{LABELS[visibility] || visibility}</Badge>;
+  return <Badge className={VARIANTS[visibility] || 'bg-muted text-muted-foreground'}>{LABELS[visibility] || getVisibilityLabel(visibility)}</Badge>;
 }
 
 export const VISIBILITY_EXPLANATIONS = [

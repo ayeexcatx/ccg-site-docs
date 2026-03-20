@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { Link } from 'react-router-dom';
 import PageHeader from '@/components/ui/PageHeader';
-import HowThisWorks from '@/components/ui/HowThisWorks';
+import { DocumentationPageIntro } from '@/components/ui/OperatingGuidance';
 import StatusBadge from '@/components/ui/StatusBadge';
 import EmptyState from '@/components/ui/EmptyState';
 import { Card, CardContent } from '@/components/ui/card';
@@ -62,13 +62,24 @@ export default function Projects() {
         <Button size="sm" className="gap-2" onClick={() => { setForm(emptyProject); setShowForm(true); }}><Plus className="w-4 h-4" /> New Project</Button>
       </PageHeader>
 
-      <HowThisWorks items={[
-        "Create a project for each documentation job. Link it to a client organization.",
-        "Add street segments to define which streets and blocks will be documented.",
-        "Create capture sessions to plan and track documentation runs.",
-        "Upload or register media files and create markers for searchable evidence.",
-        "When ready, publish the project to make it visible in the client portal."
-      ]} />
+      <DocumentationPageIntro
+        header={{
+          title: 'Projects Operational Overview',
+          purpose: 'Projects are the top-level Base44 record for every documentation engagement. Use this page to define scope, client alignment, and downstream workflow ownership before segment, route, media, and review work begins.',
+          role: 'Company admins, project managers, and operational leads own this page. Documenters usually consume project context downstream rather than creating or publishing project records here.',
+          workflowSummary: 'Create the project, confirm client and municipal metadata, define documentation expectations, then hand the project into segment planning, session scheduling, media registration, and marker review.',
+          visibilityRules: 'Internal notes and draft workflow status remain company-side. Client visibility starts only after deliberate publication and client-safe notes are reviewed.',
+          nextSteps: 'Open a project detail page to manage readiness, then add street segments, capture sessions, and publication-ready notes.'
+        }}
+        guide={{
+          title: 'Project Setup Workflow',
+          description: 'Use project records to keep Base44 entities aligned from initial setup through client publication without changing the current in-house workflow model.',
+          sections: [
+            { heading: 'How It Works', body: ['Create a project for each documentation job and link it to the correct client organization.', 'Define project geography and documentation expectations before segment and session records are created.', 'Use project publication only after media, markers, and client-visible notes have cleared internal review.'] },
+            { heading: 'Operational Reminder', body: 'This project record should stay clean enough to support future additions such as 360 viewer workflows, synchronized map-video review, and AI-assisted tagging without reworking the entity model.' },
+          ],
+        }}
+      />
 
       <div className="flex items-center gap-3 mb-4 flex-wrap">
         <div className="relative flex-1 max-w-sm">
