@@ -14,6 +14,7 @@ import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { DocumentationPageIntro, QAReviewChecklist, VisibilityRulesPanel, WorkflowStepsPanel, InstructionPanel } from '@/components/ui/OperatingGuidance';
 import { addRouteCheckpoint, reorderRouteCheckpoints, saveDrawnRoutePath } from '@/lib/base44Workflows';
+import { getRoutePathSummary, orderCheckpoints } from '@/lib/domainWorkflows';
 import { usePageInstructions } from '@/hooks/usePageInstructions';
 import { CHECKPOINT_TYPE_LABELS } from '@/lib/constants';
 import { AlertTriangle, ArrowDown, ArrowUp, GripVertical, MapPin, Plus, Save, Trash2 } from 'lucide-react';
@@ -65,18 +66,6 @@ function buildTemplateCheckpoints(template) {
     map_latitude: template.routePoints[index]?.lat,
     map_longitude: template.routePoints[index]?.lng,
   }));
-}
-
-function getRouteSummary(routePoints, checkpoints) {
-  const hasStart = checkpoints.some((checkpoint) => checkpoint.checkpoint_type === 'start');
-  const hasEnd = checkpoints.some((checkpoint) => checkpoint.checkpoint_type === 'end');
-  return {
-    pointCount: routePoints.length,
-    checkpointCount: checkpoints.length,
-    start: checkpoints.find((checkpoint) => checkpoint.checkpoint_type === 'start')?.checkpoint_label || 'Missing start',
-    end: checkpoints.find((checkpoint) => checkpoint.checkpoint_type === 'end')?.checkpoint_label || 'Missing end',
-    completeness: routePoints.length >= 2 && hasStart && hasEnd ? 'Operationally complete' : 'Needs review',
-  };
 }
 
 function RouteSetupPanel({
@@ -237,7 +226,7 @@ export default function RouteEditor() {
   const projectSegments = useMemo(() => segments.filter((segment) => !routeState.projectId || segment.project_id === routeState.projectId), [segments, routeState.projectId]);
   const segmentSessions = useMemo(() => sessions.filter((session) => (!routeState.projectId || session.project_id === routeState.projectId) && (!routeState.segmentId || session.street_segment_id === routeState.segmentId)), [sessions, routeState.projectId, routeState.segmentId]);
   const selectedSession = useMemo(() => sessions.find((session) => session.id === routeState.sessionId), [sessions, routeState.sessionId]);
-  const routeSummary = useMemo(() => getRouteSummary(routeState.routePoints, routeState.checkpoints), [routeState.routePoints, routeState.checkpoints]);
+  const routeSummary = useMemo(() => getRoutePathSummary(routeState.routePoints, routeState.checkpoints), [routeState.routePoints, routeState.checkpoints]);
 
   useEffect(() => {
     if (!selectedSession) return;
@@ -347,7 +336,7 @@ export default function RouteEditor() {
     const swapIndex = index + direction;
     if (swapIndex < 0 || swapIndex >= next.length) return;
     [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
-    const resequenced = next.map((checkpoint, sequence_order) => ({ ...checkpoint, sequence_order }));
+    const resequenced = orderCheckpoints(next);
     setRouteState((current) => ({ ...current, checkpoints: resequenced }));
     await resequencePersistedCheckpoints(resequenced);
   };
@@ -357,7 +346,7 @@ export default function RouteEditor() {
     const next = [...routeState.checkpoints];
     const [moved] = next.splice(source.index, 1);
     next.splice(destination.index, 0, moved);
-    const resequenced = next.map((checkpoint, sequence_order) => ({ ...checkpoint, sequence_order }));
+    const resequenced = orderCheckpoints(next);
     setRouteState((current) => ({ ...current, checkpoints: resequenced }));
     await resequencePersistedCheckpoints(resequenced);
   };

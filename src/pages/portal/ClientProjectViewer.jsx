@@ -14,6 +14,7 @@ import { OperatingGuide, WorkflowStepsPanel, VisibilityRulesPanel } from '@/comp
 import { Bookmark, File, FileVideo, Image, MapPin, Search, Video, ArrowLeft } from 'lucide-react';
 import { MARKER_TYPE_LABELS, SEGMENT_TYPE_LABELS, VIEW_TYPE_LABELS } from '@/lib/constants';
 import { getVisibilityState } from '@/lib/base44Workflows';
+import { getClientVisibleProjectData } from '@/lib/domainWorkflows';
 
 export default function ClientProjectViewer() {
   const projectId = window.location.pathname.split('/').pop();
@@ -25,10 +26,11 @@ export default function ClientProjectViewer() {
   const { data: markers = [] } = useQuery({ queryKey: ['portal-markers', projectId], queryFn: () => base44.entities.MediaMarker.filter({ project_id: projectId }), enabled: !!projectId });
 
   const project = projectResults[0];
-  const publishedMedia = media.filter((item) => item.publish_to_client);
-  const clientMarkers = markers.filter((marker) => marker.is_client_visible);
-  const filteredSegments = segments.filter((segment) => `${segment.street_name} ${segment.from_intersection} ${segment.to_intersection}`.toLowerCase().includes(search.toLowerCase()));
-  const segmentMap = Object.fromEntries(segments.map((segment) => [segment.id, segment]));
+  const clientVisibleProjectData = useMemo(() => getClientVisibleProjectData({ project, segments, media, markers }), [project, segments, media, markers]);
+  const publishedMedia = clientVisibleProjectData.media;
+  const clientMarkers = clientVisibleProjectData.markers;
+  const filteredSegments = clientVisibleProjectData.segments.filter((segment) => `${segment.street_name} ${segment.from_intersection} ${segment.to_intersection}`.toLowerCase().includes(search.toLowerCase()));
+  const segmentMap = Object.fromEntries(clientVisibleProjectData.segments.map((segment) => [segment.id, segment]));
   const groupedMedia = useMemo(() => publishedMedia.reduce((accumulator, item) => {
     const key = item.street_segment_id || 'unassigned';
     accumulator[key] ||= [];
@@ -70,7 +72,7 @@ export default function ClientProjectViewer() {
             <p className="text-sm text-muted-foreground leading-6">{project.client_portal_summary || project.client_visible_notes || 'This viewer contains the published documentation package approved for client review.'}</p>
           </div>
           <div className="flex gap-2 flex-wrap">
-            <Badge>{segments.length} segments</Badge>
+            <Badge>{clientVisibleProjectData.segments.length} segments</Badge>
             <Badge variant="outline">{publishedMedia.length} published media files</Badge>
             <Badge variant="outline">{clientMarkers.length} client-visible markers</Badge>
           </div>

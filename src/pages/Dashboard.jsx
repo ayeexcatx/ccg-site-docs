@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { getRoleAwareDashboardData, validateProjectReadiness } from '@/lib/base44Workflows';
+import { getRoleAwareDashboardData } from '@/lib/base44Workflows';
+import { getProjectReadinessSummary } from '@/lib/domainWorkflows';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { useUserProfile } from '@/lib/useUserProfile';
@@ -24,7 +25,7 @@ export default function Dashboard() {
 
   const readinessProjects = useMemo(() => projects.map((project) => ({
     project,
-    readiness: validateProjectReadiness({
+    readiness: getProjectReadinessSummary({
       project,
       segments: [],
       sessions: sessions.filter((session) => session.project_id === project.id),

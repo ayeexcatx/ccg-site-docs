@@ -11,7 +11,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { OperatingGuide, QAReviewChecklist, VisibilityRulesPanel, WorkflowStepsPanel, InstructionPanel } from '@/components/ui/OperatingGuidance';
-import { validateProjectReadiness, getVisibilityState } from '@/lib/base44Workflows';
+import { getVisibilityState } from '@/lib/base44Workflows';
+import { getProjectReadinessSummary } from '@/lib/domainWorkflows';
 import { usePageInstructions } from '@/hooks/usePageInstructions';
 import { useUserProfile } from '@/lib/useUserProfile';
 import { getRoleLabel } from '@/lib/roleUtils';
@@ -31,7 +32,7 @@ export default function ProjectDetail() {
   const { data: accessAssignments = [] } = useQuery({ queryKey: ['project-access', projectId], queryFn: () => base44.entities.UserProfile.list('-created_date', 200), enabled: !!projectId });
 
   const project = projectResults[0];
-  const readiness = useMemo(() => validateProjectReadiness({ project, segments, sessions, media, markers, routes }), [project, segments, sessions, media, markers, routes]);
+  const readiness = useMemo(() => getProjectReadinessSummary({ project, segments, sessions, media, markers, routes }), [project, segments, sessions, media, markers, routes]);
   const mediaCounts = useMemo(() => media.reduce((accumulator, item) => { accumulator[item.media_type || 'unknown'] = (accumulator[item.media_type || 'unknown'] || 0) + 1; return accumulator; }, {}), [media]);
   const markerCounts = useMemo(() => markers.reduce((accumulator, item) => { accumulator[getVisibilityState(item) || 'unknown'] = (accumulator[getVisibilityState(item)] || 0) + 1; return accumulator; }, {}), [markers]);
 

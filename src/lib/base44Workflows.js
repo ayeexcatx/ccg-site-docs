@@ -1,4 +1,5 @@
 import { base44 } from '@/api/base44Client';
+import { getFieldSessionSummary, getProjectReadinessSummary, getVisibilityLabelForRecord, orderCheckpoints } from '@/lib/domainWorkflows';
 
 const safeList = async (entityName, sort = '-created_date', limit = 200) => {
   try {
@@ -59,8 +60,9 @@ export async function addRouteCheckpoint({ session, routePathId, checkpoint, seq
 }
 
 export async function reorderRouteCheckpoints(checkpoints = []) {
+  const orderedCheckpoints = orderCheckpoints(checkpoints);
   await Promise.all(
-    checkpoints.map((checkpoint, index) =>
+    orderedCheckpoints.map((checkpoint, index) =>
       base44.entities.RouteCheckpoint.update(checkpoint.id, {
         sequence_order: index,
       })
@@ -83,16 +85,7 @@ export async function logFieldSessionEvent({ session, eventType, eventLabel, eve
 }
 
 export function estimateCheckpointTimestampsFromSessionEvents({ checkpoints = [], events = [] }) {
-  const eventLookup = [...events].sort((a, b) => (a.timestamp_offset_seconds || 0) - (b.timestamp_offset_seconds || 0));
-  return checkpoints.map((checkpoint, index) => {
-    const event = eventLookup[index] || eventLookup[eventLookup.length - 1] || null;
-    return {
-      checkpoint_id: checkpoint.id,
-      checkpoint_label: checkpoint.checkpoint_label,
-      estimated_timestamp_seconds: event?.timestamp_offset_seconds ?? null,
-      source_event_type: event?.event_type || null,
-    };
-  });
+  return getFieldSessionSummary({ checkpoints, events }).estimatedTimeline;
 }
 
 export function createMarkerFromCheckpoint({ checkpoint, mediaFileId, timestampSeconds = 0, confidenceLevel = 'estimated' }) {
@@ -137,57 +130,11 @@ export async function syncMarkersFromRouteAndDuration({ checkpoints = [], mediaF
 }
 
 export function getVisibilityState(record = {}, clientField = 'client_visible_notes', internalField = 'internal_notes', visibleFlag = 'is_client_visible') {
-  if (record[visibleFlag]) return 'client_visible';
-  if (record[clientField] && !record[visibleFlag]) return 'needs_review';
-  if (record[internalField]) return 'internal_only';
-  return 'needs_review';
+  return getVisibilityLabelForRecord(record, clientField, internalField, visibleFlag);
 }
 
 export function validateProjectReadiness({ project, segments = [], sessions = [], media = [], markers = [], routes = [] }) {
-  const requiredViewTypes = [
-    project?.include_photos && 'profile',
-    project?.include_standard_video && 'cross_section',
-    project?.include_360_video && '360_walk',
-  ].filter(Boolean);
-  const viewTypesPresent = requiredViewTypes.filter((type) => media.some((item) => item.view_type === type));
-  const uploadedSessions = sessions.filter((session) => ['uploaded', 'under_review', 'approved', 'published'].includes(session.session_status));
-  const completeSessions = sessions.filter((session) => ['approved', 'published'].includes(session.session_status));
-  const mediaAttached = media.filter((item) => !!item.file_url || !!item.thumbnail_url);
-  const reviewedMarkers = markers.filter((marker) => marker.confidence_level === 'confirmed');
-  const clientSafeMarkers = markers.filter((marker) => getVisibilityState(marker) === 'client_visible');
-  const notesValidated = !project?.client_visible_notes || !/todo|tbd|draft|internal/i.test(project.client_visible_notes);
-  const routeCoverage = segments.length ? routes.length / segments.length : 0;
-  const sessionCoverage = segments.length ? sessions.length / segments.length : 0;
-
-  const checks = [
-    { key: 'segments', label: 'Required segments present', ready: segments.length > 0, reason: segments.length ? `${segments.length} scoped segments loaded.` : 'Add at least one segment before publishing.' },
-    { key: 'view_types', label: 'Required view types present', ready: requiredViewTypes.every((type) => viewTypesPresent.includes(type)), reason: requiredViewTypes.length ? `${viewTypesPresent.length}/${requiredViewTypes.length} required view types are covered.` : 'Project view requirements are not yet defined.' },
-    { key: 'sessions', label: 'Sessions complete', ready: sessions.length > 0 && completeSessions.length === sessions.length, reason: sessions.length ? `${completeSessions.length}/${sessions.length} sessions are approved or published.` : 'Create and complete at least one capture session.' },
-    { key: 'media', label: 'Media attached', ready: mediaAttached.length > 0, reason: mediaAttached.length ? `${mediaAttached.length} media records have client-deliverable files or thumbnails.` : 'Attach media assets before publishing.' },
-    { key: 'markers', label: 'Markers reviewed', ready: markers.length > 0 && reviewedMarkers.length === markers.length, reason: markers.length ? `${reviewedMarkers.length}/${markers.length} markers are confirmed.` : 'Add and review markers before publishing.' },
-    { key: 'notes', label: 'Client-visible notes validated', ready: notesValidated && clientSafeMarkers.length >= 0, reason: notesValidated ? 'Client-facing notes do not include draft/internal language.' : 'Client-visible notes contain draft/internal wording that must be cleaned up.' },
-  ];
-
-  const blockers = checks.filter((check) => !check.ready).map((check) => `${check.label}: ${check.reason}`);
-
-  return {
-    routeCompleteness: Math.min(100, Math.round(routeCoverage * 100)),
-    sessionCompleteness: Math.min(100, Math.round(sessionCoverage * 100)),
-    uploadReadiness: uploadedSessions.length === sessions.length && sessions.length > 0,
-    reviewReadiness: reviewedMarkers.length >= Math.max(1, Math.floor(markers.length * 0.6 || 1)),
-    publishReadiness: checks.every((check) => check.ready),
-    checklist: checks,
-    blockers,
-    summary: {
-      requiredViewTypes,
-      viewTypesPresent,
-      completeSessions: completeSessions.length,
-      totalSessions: sessions.length,
-      reviewedMarkers: reviewedMarkers.length,
-      totalMarkers: markers.length,
-      mediaAttached: mediaAttached.length,
-    },
-  };
+  return getProjectReadinessSummary({ project, segments, sessions, media, markers, routes });
 }
 
 export async function getRoleAwareDashboardData({ role, profile }) {
