@@ -1,0 +1,76 @@
+{
+  "name": "StreetSegment",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string"
+    },
+    "segment_type": {
+      "type": "string",
+      "enum": [
+        "street",
+        "block",
+        "curb_ramp_group",
+        "intersection_group",
+        "custom_segment"
+      ],
+      "default": "street"
+    },
+    "street_name": {
+      "type": "string"
+    },
+    "segment_name": {
+      "type": "string"
+    },
+    "segment_code": {
+      "type": "string"
+    },
+    "side_of_street": {
+      "type": "string",
+      "enum": [
+        "right",
+        "left",
+        "center",
+        "both",
+        "not_applicable"
+      ],
+      "default": "both"
+    },
+    "address_range_start": {
+      "type": "string"
+    },
+    "address_range_end": {
+      "type": "string"
+    },
+    "from_intersection": {
+      "type": "string"
+    },
+    "to_intersection": {
+      "type": "string"
+    },
+    "municipality": {
+      "type": "string"
+    },
+    "sequence_order": {
+      "type": "number",
+      "default": 0
+    },
+    "expected_views_json": {
+      "type": "string",
+      "description": "JSON array of expected view types"
+    },
+    "route_length_notes": {
+      "type": "string"
+    },
+    "internal_notes": {
+      "type": "string"
+    },
+    "client_visible_notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id",
+    "street_name"
+  ]
+}
