@@ -14,7 +14,7 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Plus, FileVideo, Search, Pencil, Image, Video, File } from 'lucide-react';
+import { Plus, FileVideo, Search, Image, Video, File } from 'lucide-react';
 import { VIEW_TYPE_LABELS } from '@/lib/constants';
 
 const MEDIA_TYPES = ['photo', 'video', 'video_360', 'thumbnail', 'preview_clip', 'document', 'export'];
