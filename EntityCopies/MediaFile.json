@@ -1,0 +1,131 @@
+{
+  "name": "MediaFile",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string"
+    },
+    "street_segment_id": {
+      "type": "string"
+    },
+    "capture_session_id": {
+      "type": "string"
+    },
+    "media_type": {
+      "type": "string",
+      "enum": [
+        "photo",
+        "video",
+        "video_360",
+        "thumbnail",
+        "preview_clip",
+        "document",
+        "export"
+      ],
+      "default": "video"
+    },
+    "media_title": {
+      "type": "string"
+    },
+    "original_filename": {
+      "type": "string"
+    },
+    "storage_mode": {
+      "type": "string",
+      "enum": [
+        "native_upload",
+        "external_link",
+        "future_connector_storage"
+      ],
+      "default": "native_upload"
+    },
+    "file_url": {
+      "type": "string"
+    },
+    "preview_url": {
+      "type": "string"
+    },
+    "thumbnail_url": {
+      "type": "string"
+    },
+    "mime_type": {
+      "type": "string"
+    },
+    "duration_seconds": {
+      "type": "number"
+    },
+    "file_size_bytes": {
+      "type": "number"
+    },
+    "resolution_label": {
+      "type": "string"
+    },
+    "capture_device": {
+      "type": "string"
+    },
+    "capture_datetime": {
+      "type": "string"
+    },
+    "upload_datetime": {
+      "type": "string"
+    },
+    "uploaded_by": {
+      "type": "string"
+    },
+    "view_type": {
+      "type": "string",
+      "enum": [
+        "profile",
+        "curb_line_edge_of_pavement",
+        "cross_section",
+        "360_walk",
+        "reverse_view",
+        "custom"
+      ],
+      "default": "profile"
+    },
+    "direction_label": {
+      "type": "string"
+    },
+    "side_of_street": {
+      "type": "string",
+      "enum": [
+        "right",
+        "left",
+        "center",
+        "both",
+        "not_applicable"
+      ]
+    },
+    "is_primary_for_segment": {
+      "type": "boolean",
+      "default": false
+    },
+    "publish_to_client": {
+      "type": "boolean",
+      "default": false
+    },
+    "processing_status": {
+      "type": "string",
+      "enum": [
+        "uploaded",
+        "processing",
+        "ready",
+        "error",
+        "archived"
+      ],
+      "default": "uploaded"
+    },
+    "internal_notes": {
+      "type": "string"
+    },
+    "client_visible_notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id",
+    "media_type",
+    "media_title"
+  ]
+}
