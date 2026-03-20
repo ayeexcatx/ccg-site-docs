@@ -8,7 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { DocumentationPageIntro, QAReviewChecklist, VisibilityRulesPanel, WorkflowStepsPanel, InstructionPanel } from '@/components/ui/OperatingGuidance';
-import { estimateCheckpointTimestampsFromSessionEvents, logFieldSessionEvent } from '@/lib/base44Workflows';
+import { logFieldSessionEvent } from '@/lib/base44Workflows';
+import { getFieldSessionSummary } from '@/lib/domainWorkflows';
 import { usePageInstructions } from '@/hooks/usePageInstructions';
 import { formatTimestamp, getWorkflowStateLabel } from '@/lib/displayUtils';
 import { Clock, CornerDownRight, Landmark, Pause, Play, Square, StickyNote, Crosshair } from 'lucide-react';
@@ -80,39 +81,6 @@ function SessionSelectionCard({ sessions, selectedSessionId, setSelectedSessionI
   );
 }
 
-function ActiveTimerPanel({ elapsed, isPaused, onPauseResume, onFinish, note, setNote }) {
-  return (
-    <>
-      <Card>
-        <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="mb-2 flex items-center gap-2"><Clock className="h-5 w-5 text-primary" /><span className="text-3xl font-mono font-bold tracking-wider">{formatTimestamp(elapsed)}</span></div>
-            <Badge variant={isPaused ? 'destructive' : 'default'}>{isPaused ? 'Paused — timer stopped until you resume' : 'Recording — timer running'}</Badge>
-          </div>
-          <div className="grid w-full grid-cols-2 gap-3 sm:w-auto">
-            <Button variant="outline" className="h-12" onClick={onPauseResume}><Pause className="mr-2 h-4 w-4" /> {isPaused ? 'Resume' : 'Pause'}</Button>
-            <Button variant="destructive" className="h-12" onClick={onFinish}><Square className="mr-2 h-4 w-4" /> Finish</Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid grid-cols-2 gap-3">
-        {EVENT_BUTTONS.map((button) => (
-          <Button key={button.type} className={`flex h-24 flex-col items-center justify-center gap-2 text-base font-semibold text-white ${button.color}`}>
-            <button.icon className="h-6 w-6" />
-            {button.label}
-          </Button>
-        ))}
-      </div>
-
-      <Card>
-        <CardHeader className="pb-3"><CardTitle className="text-base">Optional Note for Next Event</CardTitle></CardHeader>
-        <CardContent><Textarea placeholder="Describe what staff or QA reviewers should know about the next event you log." value={note} onChange={(event) => setNote(event.target.value)} className="min-h-24" /></CardContent>
-      </Card>
-    </>
-  );
-}
-
 export default function FieldSession() {
   const [selectedSessionId, setSelectedSessionId] = useState('');
   const [note, setNote] = useState('');
@@ -127,13 +95,9 @@ export default function FieldSession() {
 
   const activeSession = useMemo(() => sessions.find((session) => session.id === selectedSessionId), [sessions, selectedSessionId]);
   const { timer, start, togglePause, stop } = useFieldSessionTimer(activeSession);
-  const sessionEvents = useMemo(() => [...storedEvents, ...localEvents].sort((a, b) => (a.timestamp_offset_seconds || 0) - (b.timestamp_offset_seconds || 0)), [storedEvents, localEvents]);
-
-  const groupedEvents = useMemo(() => ({
-    lifecycle: sessionEvents.filter((event) => ['session_start', 'session_pause', 'session_resume', 'session_end'].includes(event.event_type)),
-    checkpoints: sessionEvents.filter((event) => ['intersection', 'landmark', 'curb_ramp'].includes(event.event_type)),
-    notes: sessionEvents.filter((event) => ['issue_note'].includes(event.event_type)),
-  }), [sessionEvents]);
+  const sessionSummary = useMemo(() => getFieldSessionSummary({ checkpoints: routeCheckpoints, events: [...storedEvents, ...localEvents] }), [routeCheckpoints, storedEvents, localEvents]);
+  const sessionEvents = sessionSummary.orderedEvents;
+  const groupedEvents = sessionSummary.groupedEvents;
 
   const createEventMut = useMutation({
     mutationFn: ({ eventType, eventLabel, eventNote, seconds }) => logFieldSessionEvent({ session: activeSession, eventType, eventLabel, eventNote, timestampOffsetSeconds: seconds }),
@@ -173,8 +137,8 @@ export default function FieldSession() {
     recordEvent('session_end', 'Session Ended');
     updateSessionMut.mutate({ id: activeSession.id, data: { session_status: 'uploaded', actual_end_time: new Date().toISOString() } });
     stop();
-    const estimatedTimeline = estimateCheckpointTimestampsFromSessionEvents({ checkpoints: routeCheckpoints, events: [...sessionEvents, { event_type: 'session_end', timestamp_offset_seconds: finalElapsed }] });
-    setCompletedSummary({ totalDuration: finalElapsed, totalEvents: sessionEvents.length + 1, estimatedTimeline });
+    const completedSessionSummary = getFieldSessionSummary({ checkpoints: routeCheckpoints, events: [...sessionEvents, { event_type: 'session_end', timestamp_offset_seconds: finalElapsed }], finalElapsedSeconds: finalElapsed });
+    setCompletedSummary(completedSessionSummary);
   };
 
   return (

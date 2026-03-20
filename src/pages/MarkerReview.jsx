@@ -19,6 +19,7 @@ import { usePageInstructions } from '@/hooks/usePageInstructions';
 import { useUserProfile } from '@/lib/useUserProfile';
 import { MARKER_TYPE_LABELS } from '@/lib/constants';
 import { getVisibilityState } from '@/lib/base44Workflows';
+import { getMarkerConfidenceLabel, getMarkerReviewSummary } from '@/lib/domainWorkflows';
 import { AlertCircle, Bookmark, CheckCircle, Clock, Pencil, Plus, Search } from 'lucide-react';
 import { formatTimestamp } from '@/lib/displayUtils';
 
@@ -58,33 +59,8 @@ export default function MarkerReview() {
   const openEdit = (marker) => { setEditing(marker); setForm({ ...emptyMarker, ...marker }); setShowForm(true); };
   const handleSave = () => editing ? updateMut.mutate({ id: editing.id, data: form }) : createMut.mutate(form);
 
-  const mediaMap = Object.fromEntries(mediaFiles.map((media) => [media.id, media]));
-  const projectMap = Object.fromEntries(projects.map((project) => [project.id, project]));
-  const sessionMap = Object.fromEntries(sessions.map((session) => [session.id, session]));
-  const checkpointMap = Object.fromEntries(checkpoints.map((checkpoint) => [checkpoint.id, checkpoint]));
-  const assetMap = Object.fromEntries(assetLocations.map((asset) => [asset.id, asset]));
-
-  const filterDefinitions = useMemo(() => ([
-    { key: 'projectId', getValue: (marker) => marker.project_id },
-    { key: 'sessionId', getValue: (marker) => mediaMap[marker.media_file_id]?.capture_session_id || 'unknown' },
-    { key: 'mediaId', getValue: (marker) => marker.media_file_id },
-    { key: 'confidence', getValue: (marker) => marker.confidence_level },
-    { key: 'visibility', getValue: (marker) => marker.is_client_visible ? 'client_visible' : 'internal_only' },
-  ]), [mediaMap]);
-
-  const filteredMarkers = useMemo(() => markers.filter((marker) => {
-    const media = mediaMap[marker.media_file_id];
-    const searchText = `${marker.marker_label} ${media?.media_title || ''}`.toLowerCase();
-    const matchesStructuredFilters = filterDefinitions.every(({ key, getValue }) => filters[key] === 'all' || getValue(marker) === filters[key]);
-    return matchesStructuredFilters && searchText.includes(filters.search.toLowerCase());
-  }), [filterDefinitions, filters, markers, mediaMap]);
-
-  const groupedByMedia = useMemo(() => filteredMarkers.reduce((accumulator, marker) => {
-    const media = mediaMap[marker.media_file_id] || { id: 'unassigned', media_title: 'Unassigned media' };
-    accumulator[media.id] ||= { media, markers: [] };
-    accumulator[media.id].markers.push(marker);
-    return accumulator;
-  }, {}), [filteredMarkers, mediaMap]);
+  const markerReviewSummary = useMemo(() => getMarkerReviewSummary({ markers, mediaFiles, projects, sessions, checkpoints, assetLocations, filters }), [markers, mediaFiles, projects, sessions, checkpoints, assetLocations, filters]);
+  const { groupedByMedia, projectMap, sessionMap, checkpointMap, assetMap } = markerReviewSummary;
 
   return (
     <div className="space-y-6">
@@ -174,7 +150,7 @@ export default function MarkerReview() {
                               <div className="flex items-center gap-2 flex-wrap">
                                 <p className="text-sm font-semibold">{marker.marker_label}</p>
                                 <Badge variant="outline">{MARKER_TYPE_LABELS[marker.marker_type] || marker.marker_type}</Badge>
-                                <Badge className={CONFIDENCE_COLORS[marker.confidence_level] || ''}>{marker.confidence_level === 'confirmed' ? <CheckCircle className="w-3 h-3 mr-1" /> : marker.confidence_level === 'estimated' ? <AlertCircle className="w-3 h-3 mr-1" /> : null}{marker.confidence_level}</Badge>
+                                <Badge className={CONFIDENCE_COLORS[marker.confidence_level] || ''}>{marker.confidence_level === 'confirmed' ? <CheckCircle className="w-3 h-3 mr-1" /> : marker.confidence_level === 'estimated' ? <AlertCircle className="w-3 h-3 mr-1" /> : null}{getMarkerConfidenceLabel(marker.confidence_level)}</Badge>
                                 <Badge variant="secondary">{marker.validation_status || 'pending_review'}</Badge>
                                 <VisibilityBadge visibility={getVisibilityState(marker)} />
                               </div>
