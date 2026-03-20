@@ -1,0 +1,56 @@
+{
+  "name": "ClientOrganization",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Organization/company name"
+    },
+    "code": {
+      "type": "string",
+      "description": "Short unique code for this client"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "inactive",
+        "archived"
+      ],
+      "default": "active"
+    },
+    "primary_contact_name": {
+      "type": "string"
+    },
+    "primary_contact_email": {
+      "type": "string"
+    },
+    "primary_contact_phone": {
+      "type": "string"
+    },
+    "billing_notes": {
+      "type": "string"
+    },
+    "default_access_mode": {
+      "type": "string",
+      "enum": [
+        "login",
+        "invite_only",
+        "access_code_ready"
+      ],
+      "default": "login"
+    },
+    "internal_notes": {
+      "type": "string",
+      "description": "Internal-only notes, never shown to clients"
+    },
+    "client_visible_notes": {
+      "type": "string",
+      "description": "Notes visible to client users"
+    }
+  },
+  "required": [
+    "name",
+    "code"
+  ]
+}
