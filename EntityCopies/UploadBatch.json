@@ -1,0 +1,45 @@
+{
+  "name": "UploadBatch",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string"
+    },
+    "capture_session_id": {
+      "type": "string"
+    },
+    "batch_name": {
+      "type": "string"
+    },
+    "uploaded_by": {
+      "type": "string"
+    },
+    "upload_status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "uploaded",
+        "needs_mapping",
+        "needs_review",
+        "complete",
+        "error"
+      ],
+      "default": "pending"
+    },
+    "total_files": {
+      "type": "number",
+      "default": 0
+    },
+    "processed_files": {
+      "type": "number",
+      "default": 0
+    },
+    "review_notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id",
+    "batch_name"
+  ]
+}
