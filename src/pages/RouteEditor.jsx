@@ -19,11 +19,11 @@ import { getRoutePathSummary, orderCheckpoints } from '@/lib/domainWorkflows';
 import { buildRouteMediaSyncEnvelope } from '@/lib/futureArchitecture';
 import { usePageInstructions } from '@/hooks/usePageInstructions';
 import { CHECKPOINT_TYPE_LABELS } from '@/lib/constants';
-import { AlertTriangle, ArrowDown, ArrowUp, GripVertical, MapPin, Plus, Save, Trash2 } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowUp, Eye, EyeOff, GripVertical, ListChecks, MapPin, Plus, Save, Trash2, WandSparkles } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 
 const DEFAULT_CHECKPOINT = { checkpoint_type: 'intersection', checkpoint_label: '', is_client_visible: true };
-const EMPTY_ROUTE_STATE = { projectId: '', segmentId: '', sessionId: '', template: '', routeName: '', routePoints: [], checkpoints: [], warning: '' };
+const EMPTY_ROUTE_STATE = { projectId: '', segmentId: '', sessionId: '', template: '', routeName: '', routePoints: [], checkpoints: [], warning: '', isDrawing: false };
 
 const ROUTE_TEMPLATES = {
   linear_walk: {
@@ -70,45 +70,64 @@ function buildTemplateCheckpoints(template) {
   }));
 }
 
-function RouteSetupPanel({
-  projects,
-  projectSegments,
-  segmentSessions,
-  state,
-  setState,
-  onApplyTemplate,
-  onToggleDrawing,
-  onSave,
-}) {
+function StepHint({ step, title, description, active, complete, disabled }) {
+  return (
+    <div className={`rounded-xl border p-4 ${active ? 'border-primary bg-primary/5' : 'bg-background'} ${disabled ? 'opacity-60' : ''}`}>
+      <div className="mb-2 flex items-center gap-2">
+        <div className={`flex h-7 w-7 items-center justify-center rounded-full text-sm font-semibold ${complete ? 'bg-emerald-100 text-emerald-700' : active ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>{step}</div>
+        <p className="text-sm font-semibold">{title}</p>
+      </div>
+      <p className="text-sm leading-6 text-muted-foreground">{description}</p>
+    </div>
+  );
+}
+
+function RouteSetupPanel({ projects, projectSegments, segmentSessions, state, setState, selectedProject, selectedSegment, selectedSession, onApplyTemplate, onToggleDrawing, onSave, validationWarnings }) {
   return (
     <Card>
       <CardHeader className="pb-3"><CardTitle className="text-base">Guided Route Setup</CardTitle></CardHeader>
       <CardContent className="space-y-4">
-        <div>
-          <Label>1. Project</Label>
-          <Select value={state.projectId || 'none'} onValueChange={(value) => setState((current) => ({ ...current, projectId: value === 'none' ? '' : value, segmentId: '', sessionId: '', routeName: '', routePoints: [], checkpoints: [], warning: '' }))}>
-            <SelectTrigger><SelectValue placeholder="Select project" /></SelectTrigger>
-            <SelectContent><SelectItem value="none">Select project</SelectItem>{projects.map((project) => <SelectItem key={project.id} value={project.id}>{project.project_name}</SelectItem>)}</SelectContent>
-          </Select>
+        <div className="grid gap-3">
+          <StepHint step="1" title="Choose project" description="Start with the client project so the route cannot drift into the wrong operational scope." active={!state.projectId} complete={!!state.projectId} />
+          <div>
+            <Label>Project</Label>
+            <Select value={state.projectId || 'none'} onValueChange={(value) => setState((current) => ({ ...current, projectId: value === 'none' ? '' : value, segmentId: '', sessionId: '', routeName: '', routePoints: [], checkpoints: [], warning: '', isDrawing: false }))}>
+              <SelectTrigger><SelectValue placeholder="Select project" /></SelectTrigger>
+              <SelectContent><SelectItem value="none">Select project</SelectItem>{projects.map((project) => <SelectItem key={project.id} value={project.id}>{project.project_name}</SelectItem>)}</SelectContent>
+            </Select>
+            {selectedProject && <p className="mt-2 text-xs text-muted-foreground">Selected project: {selectedProject.project_code || selectedProject.project_name}.</p>}
+          </div>
         </div>
-        <div>
-          <Label>2. Segment</Label>
-          <Select value={state.segmentId || 'none'} onValueChange={(value) => setState((current) => ({ ...current, segmentId: value === 'none' ? '' : value, sessionId: '', routeName: '', routePoints: [], checkpoints: [], warning: '' }))}>
-            <SelectTrigger><SelectValue placeholder="Select segment" /></SelectTrigger>
-            <SelectContent><SelectItem value="none">Select segment</SelectItem>{projectSegments.map((segment) => <SelectItem key={segment.id} value={segment.id}>{segment.segment_code || segment.street_name}</SelectItem>)}</SelectContent>
-          </Select>
+
+        <div className="grid gap-3">
+          <StepHint step="2" title="Choose segment" description="Select the exact street segment that the route should cover. This keeps checkpoints and downstream media aligned." active={!!state.projectId && !state.segmentId} complete={!!state.segmentId} disabled={!state.projectId} />
+          <div>
+            <Label>Segment</Label>
+            <Select value={state.segmentId || 'none'} onValueChange={(value) => setState((current) => ({ ...current, segmentId: value === 'none' ? '' : value, sessionId: '', routeName: '', routePoints: [], checkpoints: [], warning: '', isDrawing: false }))}>
+              <SelectTrigger><SelectValue placeholder="Select segment" /></SelectTrigger>
+              <SelectContent><SelectItem value="none">Select segment</SelectItem>{projectSegments.map((segment) => <SelectItem key={segment.id} value={segment.id}>{segment.segment_code || segment.street_name}</SelectItem>)}</SelectContent>
+            </Select>
+            {selectedSegment && <p className="mt-2 text-xs text-muted-foreground">Coverage target: {selectedSegment.street_name || 'Unnamed segment'} {selectedSegment.from_intersection ? `from ${selectedSegment.from_intersection}` : ''} {selectedSegment.to_intersection ? `to ${selectedSegment.to_intersection}` : ''}.</p>}
+          </div>
         </div>
-        <div>
-          <Label>3. Capture Session</Label>
-          <Select value={state.sessionId || 'none'} onValueChange={(value) => setState((current) => ({ ...current, sessionId: value === 'none' ? '' : value, warning: '' }))}>
-            <SelectTrigger><SelectValue placeholder="Select session" /></SelectTrigger>
-            <SelectContent><SelectItem value="none">Select session</SelectItem>{segmentSessions.map((session) => <SelectItem key={session.id} value={session.id}>{session.session_name}</SelectItem>)}</SelectContent>
-          </Select>
+
+        <div className="grid gap-3">
+          <StepHint step="3" title="Choose session" description="Attach the route to the actual field session that will use it so timer events and markers can reuse this route spine." active={!!state.segmentId && !state.sessionId} complete={!!state.sessionId} disabled={!state.segmentId} />
+          <div>
+            <Label>Capture Session</Label>
+            <Select value={state.sessionId || 'none'} onValueChange={(value) => setState((current) => ({ ...current, sessionId: value === 'none' ? '' : value, warning: '' }))}>
+              <SelectTrigger><SelectValue placeholder="Select session" /></SelectTrigger>
+              <SelectContent><SelectItem value="none">Select session</SelectItem>{segmentSessions.map((session) => <SelectItem key={session.id} value={session.id}>{session.session_name}</SelectItem>)}</SelectContent>
+            </Select>
+            {selectedSession && <p className="mt-2 text-xs text-muted-foreground">Session ready: {selectedSession.session_name}.</p>}
+          </div>
         </div>
+
         <div>
           <Label>Route Name</Label>
           <Input value={state.routeName} onChange={(event) => setState((current) => ({ ...current, routeName: event.target.value }))} placeholder="Segment primary walking route" />
         </div>
+
         <div>
           <Label>Route Template</Label>
           <div className="flex gap-2">
@@ -119,25 +138,82 @@ function RouteSetupPanel({
                 {Object.entries(ROUTE_TEMPLATES).map(([key, template]) => <SelectItem key={key} value={key}>{template.name}</SelectItem>)}
               </SelectContent>
             </Select>
-            <Button variant="outline" onClick={onApplyTemplate} disabled={!state.template}>Create from template</Button>
+            <Button variant="outline" onClick={onApplyTemplate} disabled={!state.template}><WandSparkles className="mr-2 h-4 w-4" /> Apply</Button>
           </div>
         </div>
+
+        <div className="rounded-xl border bg-muted/20 p-4">
+          <p className="mb-2 text-sm font-semibold">Drawing workflow</p>
+          <ul className="space-y-2 text-sm leading-6 text-muted-foreground">
+            <li>Use <span className="font-medium text-foreground">Draw Route</span> before clicking the map to create route points.</li>
+            <li>Turn drawing off before placing checkpoints so map clicks do not create accidental geometry.</li>
+            <li>Save only after the warnings below are resolved or consciously accepted by QA.</li>
+          </ul>
+        </div>
+
         <div className="flex gap-2">
           <Button className="flex-1" variant={state.isDrawing ? 'destructive' : 'default'} onClick={onToggleDrawing} disabled={!state.sessionId}>{state.isDrawing ? 'Stop Drawing' : 'Draw Route'}</Button>
-          <Button variant="outline" onClick={() => setState((current) => ({ ...current, routePoints: [] }))} disabled={!state.routePoints.length}><Trash2 className="w-4 h-4" /></Button>
+          <Button variant="outline" onClick={() => setState((current) => ({ ...current, routePoints: [], warning: '' }))} disabled={!state.routePoints.length}><Trash2 className="w-4 h-4" /></Button>
         </div>
         <Button className="w-full gap-2" onClick={onSave} disabled={!state.sessionId}><Save className="w-4 h-4" /> Save Route</Button>
+
+        {!!validationWarnings.length && (
+          <div className="space-y-2">
+            {validationWarnings.map((warning) => (
+              <Alert key={warning}><AlertTriangle className="h-4 w-4" /><AlertDescription>{warning}</AlertDescription></Alert>
+            ))}
+          </div>
+        )}
         {state.warning && <Alert><AlertTriangle className="h-4 w-4" /><AlertDescription>{state.warning}</AlertDescription></Alert>}
       </CardContent>
     </Card>
   );
 }
 
+function RouteSummaryCards({ routeSummary, validationWarnings, selectedProject, selectedSegment, selectedSession }) {
+  const cards = [
+    { label: 'Route points', value: routeSummary.pointCount, tone: 'default', detail: 'Map vertices captured in the active route geometry.' },
+    { label: 'Checkpoints', value: routeSummary.checkpointCount, tone: 'default', detail: 'Ordered operational checkpoints available to field and review workflows.' },
+    { label: 'Client-visible', value: routeSummary.orderedCheckpoints.filter((checkpoint) => checkpoint.is_client_visible).length, tone: 'default', detail: 'Checkpoints eligible to support client-facing interpretation.' },
+    { label: 'Validation', value: validationWarnings.length === 0 ? 'Ready' : `${validationWarnings.length} warning${validationWarnings.length === 1 ? '' : 's'}`, tone: validationWarnings.length === 0 ? 'success' : 'warning', detail: validationWarnings.length === 0 ? 'No active warnings detected.' : 'Review the warning list before saving.' },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        {cards.map((card) => (
+          <div key={card.label} className={`rounded-xl border p-4 ${card.tone === 'warning' ? 'border-amber-200 bg-amber-50' : card.tone === 'success' ? 'border-emerald-200 bg-emerald-50' : 'bg-background'}`}>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">{card.label}</p>
+            <p className="mt-2 text-2xl font-semibold text-foreground">{card.value}</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">{card.detail}</p>
+          </div>
+        ))}
+      </div>
+
+      <Card>
+        <CardHeader className="pb-3"><CardTitle className="text-base">Operational Route Summary</CardTitle></CardHeader>
+        <CardContent className="space-y-3 text-sm text-muted-foreground">
+          <div className="flex justify-between gap-4"><span>Project</span><span className="text-right font-medium text-foreground">{selectedProject?.project_name || 'Not selected'}</span></div>
+          <div className="flex justify-between gap-4"><span>Segment</span><span className="text-right font-medium text-foreground">{selectedSegment?.segment_code || selectedSegment?.street_name || 'Not selected'}</span></div>
+          <div className="flex justify-between gap-4"><span>Session</span><span className="text-right font-medium text-foreground">{selectedSession?.session_name || 'Not selected'}</span></div>
+          <div className="flex justify-between gap-4"><span>Start checkpoint</span><span className="text-right font-medium text-foreground">{routeSummary.startLabel}</span></div>
+          <div className="flex justify-between gap-4"><span>End checkpoint</span><span className="text-right font-medium text-foreground">{routeSummary.endLabel}</span></div>
+          <div className="flex justify-between gap-4"><span>Route state</span><Badge variant={validationWarnings.length === 0 ? 'default' : 'secondary'}>{routeSummary.completenessLabel}</Badge></div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 function CheckpointBuilder({ checkpoints, setCheckpoints, addingCheckpoint, setAddingCheckpoint, newCheckpoint, setNewCheckpoint, selectedSessionId, updateCheckpointMut, deleteCheckpointMut, moveCheckpoint, onDragEnd }) {
   return (
     <Card>
-      <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0"><CardTitle className="text-base">Checkpoint Builder</CardTitle><Button size="sm" variant="outline" onClick={() => setAddingCheckpoint((value) => !value)} disabled={!selectedSessionId}><Plus className="w-4 h-4 mr-1" /> Add</Button></CardHeader>
+      <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0"><CardTitle className="text-base">Checkpoint Operations</CardTitle><Button size="sm" variant="outline" onClick={() => setAddingCheckpoint((value) => !value)} disabled={!selectedSessionId}><Plus className="w-4 h-4 mr-1" /> Add checkpoint</Button></CardHeader>
       <CardContent className="space-y-4">
+        <div className="rounded-xl border bg-muted/20 p-4">
+          <p className="mb-2 text-sm font-semibold">Checkpoint operator guidance</p>
+          <p className="text-sm leading-6 text-muted-foreground">Keep checkpoints in travel order, use clear operational labels, and mark only truly client-useful references as visible. Reorder when field traversal changes, rename inline when wording improves, and delete only if the checkpoint should no longer drive review or marker context.</p>
+        </div>
+
         {addingCheckpoint && (
           <div className="rounded-lg border bg-muted/30 p-3 space-y-3">
             <div>
@@ -158,28 +234,31 @@ function CheckpointBuilder({ checkpoints, setCheckpoints, addingCheckpoint, setA
               </div>
               <Switch checked={newCheckpoint.is_client_visible} onCheckedChange={(checked) => setNewCheckpoint((current) => ({ ...current, is_client_visible: checked }))} />
             </div>
-            <p className="text-xs text-muted-foreground">After completing this form, click the map at the checkpoint location to place it.</p>
+            <p className="text-xs text-muted-foreground">After completing this form, click the map where the checkpoint belongs. The checkpoint is placed in the current list order.</p>
           </div>
         )}
 
         <DragDropContext onDragEnd={onDragEnd}>
           <Droppable droppableId="checkpoints">
             {(provided) => (
-              <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-2 max-h-[420px] overflow-y-auto">
+              <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-2 max-h-[480px] overflow-y-auto">
                 {checkpoints.map((checkpoint, index) => (
                   <Draggable key={checkpoint.id || `checkpoint-${index}`} draggableId={String(checkpoint.id || `checkpoint-${index}`)} index={index}>
                     {(dragProvided) => (
                       <div ref={dragProvided.innerRef} {...dragProvided.draggableProps} className="rounded-lg border bg-background p-3">
                         <div className="flex items-start gap-3">
                           <div {...dragProvided.dragHandleProps} className="pt-2 text-muted-foreground"><GripVertical className="w-4 h-4" /></div>
-                          <div className="flex-1 space-y-2">
+                          <div className="flex-1 space-y-3">
                             <div className="flex items-center gap-2">
                               <Input value={checkpoint.checkpoint_label || ''} onChange={(event) => setCheckpoints((current) => current.map((item, currentIndex) => currentIndex === index ? { ...item, checkpoint_label: event.target.value } : item))} onBlur={() => checkpoint.id && !String(checkpoint.id).startsWith('template-') && updateCheckpointMut.mutate({ checkpointId: checkpoint.id, data: { checkpoint_label: checkpoint.checkpoint_label } })} />
                               <Badge variant="outline">#{index + 1}</Badge>
-                            </div>
-                            <div className="flex items-center justify-between gap-3">
                               <Badge>{CHECKPOINT_TYPE_LABELS[checkpoint.checkpoint_type] || checkpoint.checkpoint_type}</Badge>
-                              <div className="flex items-center gap-2">
+                            </div>
+
+                            <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground"><MapPin className="w-3 h-3" /> {checkpoint.map_latitude?.toFixed?.(5) || '—'}, {checkpoint.map_longitude?.toFixed?.(5) || '—'}</div>
+                              <div className="flex items-center gap-2 rounded-md border px-3 py-2">
+                                {checkpoint.is_client_visible ? <Eye className="h-3.5 w-3.5 text-emerald-600" /> : <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />}
                                 <Label className="text-xs">Client visible</Label>
                                 <Switch checked={!!checkpoint.is_client_visible} onCheckedChange={(checked) => {
                                   setCheckpoints((current) => current.map((item, currentIndex) => currentIndex === index ? { ...item, is_client_visible: checked } : item));
@@ -187,8 +266,9 @@ function CheckpointBuilder({ checkpoints, setCheckpoints, addingCheckpoint, setA
                                 }} />
                               </div>
                             </div>
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2 text-xs text-muted-foreground"><MapPin className="w-3 h-3" /> {checkpoint.map_latitude?.toFixed?.(5) || '—'}, {checkpoint.map_longitude?.toFixed?.(5) || '—'}</div>
+
+                            <div className="flex items-center justify-between gap-3">
+                              <p className="text-xs text-muted-foreground">{checkpoint.is_client_visible ? 'Visible to downstream client-safe interpretation when published.' : 'Internal-only operational reference.'}</p>
                               <div className="flex gap-1">
                                 <Button size="icon" variant="ghost" onClick={() => moveCheckpoint(index, -1)}><ArrowUp className="w-4 h-4" /></Button>
                                 <Button size="icon" variant="ghost" onClick={() => moveCheckpoint(index, 1)}><ArrowDown className="w-4 h-4" /></Button>
@@ -202,7 +282,7 @@ function CheckpointBuilder({ checkpoints, setCheckpoints, addingCheckpoint, setA
                   </Draggable>
                 ))}
                 {provided.placeholder}
-                {checkpoints.length === 0 && <p className="py-6 text-center text-sm text-muted-foreground">No checkpoints added yet. Add operational checkpoints for start/end and field reference locations.</p>}
+                {checkpoints.length === 0 && <p className="py-6 text-center text-sm text-muted-foreground">No checkpoints added yet. Add start/end anchors and any operational reference locations the field and QA teams need.</p>}
               </div>
             )}
           </Droppable>
@@ -213,7 +293,7 @@ function CheckpointBuilder({ checkpoints, setCheckpoints, addingCheckpoint, setA
 }
 
 export default function RouteEditor() {
-  const [routeState, setRouteState] = useState({ ...EMPTY_ROUTE_STATE, isDrawing: false });
+  const [routeState, setRouteState] = useState(EMPTY_ROUTE_STATE);
   const [addingCheckpoint, setAddingCheckpoint] = useState(false);
   const [newCheckpoint, setNewCheckpoint] = useState(DEFAULT_CHECKPOINT);
   const queryClient = useQueryClient();
@@ -227,9 +307,23 @@ export default function RouteEditor() {
 
   const projectSegments = useMemo(() => segments.filter((segment) => !routeState.projectId || segment.project_id === routeState.projectId), [segments, routeState.projectId]);
   const segmentSessions = useMemo(() => sessions.filter((session) => (!routeState.projectId || session.project_id === routeState.projectId) && (!routeState.segmentId || session.street_segment_id === routeState.segmentId)), [sessions, routeState.projectId, routeState.segmentId]);
+  const selectedProject = useMemo(() => projects.find((project) => project.id === routeState.projectId), [projects, routeState.projectId]);
+  const selectedSegment = useMemo(() => segments.find((segment) => segment.id === routeState.segmentId), [segments, routeState.segmentId]);
   const selectedSession = useMemo(() => sessions.find((session) => session.id === routeState.sessionId), [sessions, routeState.sessionId]);
   const routeSummary = useMemo(() => getRoutePathSummary(routeState.routePoints, routeState.checkpoints), [routeState.routePoints, routeState.checkpoints]);
   const syncEnvelope = useMemo(() => buildRouteMediaSyncEnvelope({ route: routes[0], checkpoints: routeState.checkpoints, session: selectedSession }), [routes, routeState.checkpoints, selectedSession]);
+
+  const validationWarnings = useMemo(() => {
+    const warnings = [];
+    if (!routeState.projectId) warnings.push('Choose a project before building or saving a route.');
+    if (!routeState.segmentId) warnings.push('Choose a segment so the route is attached to the correct geography.');
+    if (!routeState.sessionId) warnings.push('Choose a capture session so field timing and review tools can reuse this route.');
+    if (!routeState.routeName?.trim()) warnings.push('Add a route name so reviewers can identify the operational path quickly.');
+    if (routeState.routePoints.length < 2) warnings.push('Add at least two map points to create a usable route path.');
+    if (!routeSummary.hasRequiredAnchors) warnings.push('Add both a start checkpoint and an end checkpoint before saving.');
+    if (routeState.checkpoints.some((checkpoint) => !checkpoint.checkpoint_label?.trim())) warnings.push('Rename any blank checkpoint labels so field and QA users can interpret them.');
+    return warnings;
+  }, [routeState.projectId, routeState.segmentId, routeState.sessionId, routeState.routeName, routeState.routePoints.length, routeState.checkpoints, routeSummary.hasRequiredAnchors]);
 
   useEffect(() => {
     if (!selectedSession) return;
@@ -243,9 +337,9 @@ export default function RouteEditor() {
   useEffect(() => {
     const route = routes[0];
     setRouteState((current) => {
-      const sortedCheckpoints = [...existingCheckpoints].sort((a, b) => (a.sequence_order || 0) - (b.sequence_order || 0));
+      const sortedCheckpoints = orderCheckpoints(existingCheckpoints);
       if (!route) {
-        return { ...current, routeName: '', routePoints: [], checkpoints: sortedCheckpoints };
+        return { ...current, routeName: current.sessionId ? current.routeName : '', routePoints: current.sessionId ? current.routePoints : [], checkpoints: sortedCheckpoints };
       }
 
       try {
@@ -311,7 +405,6 @@ export default function RouteEditor() {
       setRouteState((current) => ({ ...current, routePoints: [...current.routePoints, { lat: latlng.lat, lng: latlng.lng }] }));
     }
 
-    // Business-critical: route checkpoints drive downstream marker estimation, so we only create them when a session is selected and the label is explicit.
     if (addingCheckpoint && newCheckpoint.checkpoint_label && selectedSession) {
       checkpointMut.mutate({
         checkpoint: { ...newCheckpoint, map_latitude: latlng.lat, map_longitude: latlng.lng },
@@ -330,7 +423,7 @@ export default function RouteEditor() {
       routeName: template.name,
       routePoints: template.routePoints,
       checkpoints: buildTemplateCheckpoints(template),
-      warning: 'Template loaded locally. Save the route to persist the path, then re-add template checkpoints onto the map if needed.',
+      warning: 'Template loaded locally. Save the route to persist the path, then confirm each checkpoint label and visibility state.',
     }));
   };
 
@@ -372,22 +465,25 @@ export default function RouteEditor() {
           title: 'Route Editor Operating Guide',
           description: 'Use this page to define the physical travel path for a segment-specific capture session while preserving Base44 alignment and the current in-house route workflow.',
           sections: [
+            { heading: 'Purpose', body: 'This screen is the operational source of truth for route geometry and checkpoint order. Later field timing, media review, and marker QA all depend on what is set here.' },
             { heading: 'When To Use It', body: 'Use this page after project and segment setup but before or during field-session preparation. Revisit it whenever route order changes or checkpoint visibility needs QA correction.' },
+            { heading: 'How To Use The Drawing Workflow', body: ['First choose the project, segment, and field session in order so the route is scoped correctly.', 'Then either load a template or click Draw Route and place map points in actual travel order.', 'Turn drawing off, add checkpoints, and click directly on the map for each checkpoint location.', 'Reorder, rename, and visibility-check the checkpoint list until it mirrors the real route that field staff will follow.'] },
             { heading: 'Required Fields', body: 'A valid route should include a session selection, at least two map points, a route name or template context, and both a start and end checkpoint.' },
+            { heading: 'Validation Warnings', body: 'Warnings on this page are operational, not decorative. Resolve them before handoff unless a reviewer has explicitly accepted the exception and documented why.' },
             { heading: 'Future-ready Design', body: 'Keep checkpoint labels objective and route geometry accurate so future additions such as 360 viewer overlays, map-video sync, and AI-assisted tagging can reuse the same route spine.' },
           ],
         }}
       />
 
       <FutureReadyPanel
-        title="Route and map-video sync extension notes"
-        description="Route geometry and checkpoint ordering are the canonical inputs for future map-video alignment. This panel describes the intended contract without calculating real sync output yet."
+        title="Route-to-media sync readiness"
+        description="These notes show how the current in-house route editor already supports later automation without changing the operational model today."
         items={[{
-          key: 'mapVideoSync',
-          title: 'Map-video sync placeholder',
-          status: syncEnvelope.status,
-          summary: `Prepared sync envelope for session ${syncEnvelope.captureSessionId || 'unassigned'} with ${syncEnvelope.routePointCount} route points and ${syncEnvelope.checkpointIds.length} saved checkpoint references.`,
-          workflow: 'Capture teams define the route first, then attach session media, and future sync services compute timestamp alignment only after both are stable.',
+          key: 'routeSync',
+          title: 'Checkpoint-driven sync envelope',
+          status: syncEnvelope.syncStatus,
+          summary: `This route currently exposes ${syncEnvelope.checkpointCount} checkpoint references for session ${syncEnvelope.sessionId || 'not selected'} and can support downstream review handoff once the path and checkpoints are stable.`,
+          workflow: 'Field timing, session media, and future sync services compute timestamp alignment only after both are stable.',
           entities: ['RoutePath', 'RouteCheckpoint', 'CaptureSession', 'MediaFile', 'MediaMarker'],
           extensionPoints: syncEnvelope.futureComputationNotes,
         }]}
@@ -395,10 +491,16 @@ export default function RouteEditor() {
 
       <div className="grid gap-6 xl:grid-cols-[1.8fr_1fr]">
         <div className="space-y-6">
+          <RouteSummaryCards routeSummary={routeSummary} validationWarnings={validationWarnings} selectedProject={selectedProject} selectedSegment={selectedSegment} selectedSession={selectedSession} />
+
           <Card className="overflow-hidden">
             <CardHeader className="pb-3"><CardTitle className="text-base">Interactive Route Map</CardTitle></CardHeader>
-            <CardContent className="p-0">
-              <div className="h-[560px]">
+            <CardContent className="space-y-4 p-4">
+              <div className="rounded-xl border bg-muted/20 p-4">
+                <p className="mb-2 text-sm font-semibold">Map operating instructions</p>
+                <p className="text-sm leading-6 text-muted-foreground">When drawing is active, every map click creates another route point. When checkpoint creation is open, clicking the map places the checkpoint at the selected location. Keep those two modes intentional so the route line and checkpoint stack stay clean.</p>
+              </div>
+              <div className="h-[560px] overflow-hidden rounded-xl border">
                 <MapContainer center={[34.0522, -118.2437]} zoom={14} className="h-full w-full" scrollWheelZoom>
                   <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
                   <MapClickHandler onMapClick={handleMapClick} />
@@ -443,21 +545,14 @@ export default function RouteEditor() {
             segmentSessions={segmentSessions}
             state={routeState}
             setState={setRouteState}
+            selectedProject={selectedProject}
+            selectedSegment={selectedSegment}
+            selectedSession={selectedSession}
             onApplyTemplate={applyTemplate}
             onToggleDrawing={() => setRouteState((current) => ({ ...current, isDrawing: !current.isDrawing }))}
             onSave={() => saveRouteMut.mutate()}
+            validationWarnings={validationWarnings}
           />
-
-          <Card>
-            <CardHeader className="pb-3"><CardTitle className="text-base">Route Summary</CardTitle></CardHeader>
-            <CardContent className="space-y-2 text-sm text-muted-foreground">
-              <div className="flex justify-between"><span>Point count</span><span className="font-medium text-foreground">{routeSummary.pointCount}</span></div>
-              <div className="flex justify-between"><span>Checkpoint count</span><span className="font-medium text-foreground">{routeSummary.checkpointCount}</span></div>
-              <div className="flex justify-between gap-4"><span>Start</span><span className="font-medium text-right text-foreground">{routeSummary.start}</span></div>
-              <div className="flex justify-between gap-4"><span>End</span><span className="font-medium text-right text-foreground">{routeSummary.end}</span></div>
-              <div className="flex justify-between"><span>Completeness</span><Badge variant={routeSummary.completeness === 'Operationally complete' ? 'default' : 'secondary'}>{routeSummary.completeness}</Badge></div>
-            </CardContent>
-          </Card>
 
           <CheckpointBuilder
             checkpoints={routeState.checkpoints}
@@ -472,6 +567,13 @@ export default function RouteEditor() {
             moveCheckpoint={moveCheckpoint}
             onDragEnd={onDragEnd}
           />
+
+          <Card>
+            <CardHeader className="pb-3"><CardTitle className="text-base flex items-center gap-2"><ListChecks className="h-4 w-4 text-primary" /> Route warning review</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              {validationWarnings.length === 0 ? <p className="text-sm text-muted-foreground">No active warnings. This route appears operationally complete for handoff.</p> : validationWarnings.map((warning) => <div key={warning} className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{warning}</div>)}
+            </CardContent>
+          </Card>
 
           <InstructionPanel instructions={instructions.filter((instruction) => instruction.instruction_category === 'qa' || instruction.instruction_category === 'mapping')} />
         </div>

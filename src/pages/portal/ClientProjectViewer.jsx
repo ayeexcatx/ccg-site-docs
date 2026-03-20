@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { OperatingGuide, WorkflowStepsPanel, VisibilityRulesPanel } from '@/components/ui/OperatingGuidance';
-import { Bookmark, File, FileVideo, Image, MapPin, Search, Video, ArrowLeft } from 'lucide-react';
+import { Bookmark, File, FileVideo, Image, MapPin, Search, Video, ArrowLeft, Layers3 } from 'lucide-react';
 import { MARKER_TYPE_LABELS, SEGMENT_TYPE_LABELS, VIEW_TYPE_LABELS } from '@/lib/constants';
 import { getVisibilityState } from '@/lib/base44Workflows';
 import { getClientVisibleProjectData } from '@/lib/domainWorkflows';
@@ -19,113 +19,37 @@ import { getClientVisibleProjectData } from '@/lib/domainWorkflows';
 export default function ClientProjectViewer() {
   const projectId = window.location.pathname.split('/').pop();
   const [search, setSearch] = useState('');
-
+  const [selectedSegmentId, setSelectedSegmentId] = useState('all');
+  const [selectedViewType, setSelectedViewType] = useState('all');
   const { data: projectResults = [] } = useQuery({ queryKey: ['portal-project', projectId], queryFn: () => base44.entities.Project.filter({ id: projectId }) });
   const { data: segments = [] } = useQuery({ queryKey: ['portal-segments', projectId], queryFn: () => base44.entities.StreetSegment.filter({ project_id: projectId }), enabled: !!projectId });
   const { data: media = [] } = useQuery({ queryKey: ['portal-media', projectId], queryFn: () => base44.entities.MediaFile.filter({ project_id: projectId }), enabled: !!projectId });
   const { data: markers = [] } = useQuery({ queryKey: ['portal-markers', projectId], queryFn: () => base44.entities.MediaMarker.filter({ project_id: projectId }), enabled: !!projectId });
-
   const project = projectResults[0];
   const clientVisibleProjectData = useMemo(() => getClientVisibleProjectData({ project, segments, media, markers }), [project, segments, media, markers]);
   const publishedMedia = clientVisibleProjectData.media;
   const clientMarkers = clientVisibleProjectData.markers;
-  const filteredSegments = clientVisibleProjectData.segments.filter((segment) => `${segment.street_name} ${segment.from_intersection} ${segment.to_intersection}`.toLowerCase().includes(search.toLowerCase()));
   const segmentMap = Object.fromEntries(clientVisibleProjectData.segments.map((segment) => [segment.id, segment]));
-  const groupedMedia = useMemo(() => publishedMedia.reduce((accumulator, item) => {
-    const key = item.street_segment_id || 'unassigned';
-    accumulator[key] ||= [];
-    accumulator[key].push(item);
-    return accumulator;
-  }, {}), [publishedMedia]);
-  const groupedMarkers = useMemo(() => clientMarkers.reduce((accumulator, marker) => {
-    const mediaFile = publishedMedia.find((item) => item.id === marker.media_file_id);
-    const key = mediaFile?.street_segment_id || 'unassigned';
-    accumulator[key] ||= [];
-    accumulator[key].push({ marker, mediaFile });
-    return accumulator;
-  }, {}), [clientMarkers, publishedMedia]);
-
+  const viewTypeOptions = [...new Set(publishedMedia.map((item) => item.view_type).filter(Boolean))];
+  const filteredSegments = clientVisibleProjectData.segments.filter((segment) => `${segment.street_name} ${segment.from_intersection} ${segment.to_intersection}`.toLowerCase().includes(search.toLowerCase()) && (selectedSegmentId === 'all' || selectedSegmentId === segment.id));
+  const filteredMedia = publishedMedia.filter((item) => (selectedSegmentId === 'all' || item.street_segment_id === selectedSegmentId) && (selectedViewType === 'all' || item.view_type === selectedViewType) && `${item.media_title} ${item.client_visible_notes || ''}`.toLowerCase().includes(search.toLowerCase()));
+  const filteredMarkers = clientMarkers.filter((marker) => { const mediaFile = publishedMedia.find((item) => item.id === marker.media_file_id); return (selectedSegmentId === 'all' || mediaFile?.street_segment_id === selectedSegmentId) && `${marker.marker_label} ${marker.client_visible_notes || ''} ${mediaFile?.media_title || ''}`.toLowerCase().includes(search.toLowerCase()); });
+  const groupedMedia = useMemo(() => filteredMedia.reduce((accumulator, item) => { const key = item.street_segment_id || 'unassigned'; accumulator[key] ||= []; accumulator[key].push(item); return accumulator; }, {}), [filteredMedia]);
+  const groupedMarkers = useMemo(() => filteredMarkers.reduce((accumulator, marker) => { const mediaFile = publishedMedia.find((item) => item.id === marker.media_file_id); const key = mediaFile?.street_segment_id || 'unassigned'; accumulator[key] ||= []; accumulator[key].push({ marker, mediaFile }); return accumulator; }, {}), [filteredMarkers, publishedMedia]);
   if (!project) return <div className="flex items-center justify-center h-64"><div className="w-6 h-6 border-2 border-muted border-t-primary rounded-full animate-spin" /></div>;
-
   const MEDIA_ICONS = { photo: Image, video: Video, video_360: Video, thumbnail: Image, preview_clip: Video, document: File, export: File };
-
   return (
     <div className="space-y-6">
       <Link to="/portal/projects" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="w-4 h-4" /> Back to Projects</Link>
       <PageHeader title={project.project_name} description={`${project.municipality || ''} ${project.state || ''}`} />
-
-      <PermissionNotice
-        audience={[
-          'Client Managers can review the published package for their organization and coordinate questions with CCG.',
-          'Client Viewers have read-only access to the same approved content without edit or publish controls.',
-        ]}
-        internalData="Internal notes, QA status text, review controls, and unpublished operational context are excluded from this page."
-        clientVisibleData="Published media, approved client-visible notes, and markers intentionally flagged for client visibility appear here."
-        publishingEffect="Publishing is the gate that moves project content from internal operations into this portal. Items not published remain hidden even if they exist internally."
-        mistakesToAvoid="If expected content is missing, do not assume deletion; it may still be unpublished or under review. Use the visibility badges and published notes as the source of truth."
-      />
-
-      <Card>
-        <CardContent className="p-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-sm font-semibold">Project summary</p>
-            <p className="text-sm text-muted-foreground leading-6">{project.client_portal_summary || project.client_visible_notes || 'This viewer contains the published documentation package approved for client review.'}</p>
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            <Badge>{clientVisibleProjectData.segments.length} segments</Badge>
-            <Badge variant="outline">{publishedMedia.length} published media files</Badge>
-            <Badge variant="outline">{clientMarkers.length} client-visible markers</Badge>
-          </div>
-        </CardContent>
-      </Card>
-
-      <OperatingGuide
-        title="How To Use This Project Viewer"
-        description="This client-facing view is organized to help you browse documented areas, open media, and review approved reference markers without exposing internal production notes."
-        sections={[
-          { heading: 'Purpose', body: 'Use this viewer to review the published site-documentation package for a project in a structured, segment-based format.' },
-          { heading: 'Who Uses This', body: 'Client stakeholders, project reviewers, and authorized partner teams should use this view when they need approved documentation outputs.' },
-          { heading: 'When To Use It', body: 'Use this page after CCG has completed internal review and published materials for client access.' },
-          { heading: 'How It Works', body: 'Browse by segment to understand location coverage, switch to media to inspect published files, and use markers to jump to notable reference points described in client-safe language.' },
-          { heading: 'Required Fields', body: 'Published records include only approved client-facing fields such as titles, summaries, view types, and curated notes.' },
-          { heading: 'Client Visibility Rules', body: 'Internal-only notes, QA comments, and operational guidance are intentionally excluded from this viewer.' },
-          { heading: 'Related Next Steps', body: 'If you need clarifications or additional coverage not shown here, contact your CCG project representative for the next update cycle.' },
-        ]}
-      />
-
-      <WorkflowStepsPanel title="Suggested Client Workflow" steps={[
-        { title: 'Start with segments', description: 'Identify the street or segment you need so the rest of the viewer stays grounded in project geography.' },
-        { title: 'Open the relevant media', description: 'Review the media card details to understand view type, file type, and any approved client-facing notes.' },
-        { title: 'Use markers as reference points', description: 'Markers identify important locations or moments that have already been reviewed and approved for client viewing.' },
-      ]} />
-
+      <PermissionNotice audience={['Client Managers can review the published package for their organization and coordinate questions with CCG.', 'Client Viewers have read-only access to the same approved content without edit or publish controls.']} internalData="Internal notes, QA status text, review controls, and unpublished operational context are excluded from this page." clientVisibleData="Published media, approved client-visible notes, and markers intentionally flagged for client visibility appear here." publishingEffect="Publishing is the gate that moves project content from internal operations into this portal. Items not published remain hidden even if they exist internally." mistakesToAvoid="If expected content is missing, do not assume deletion; it may still be unpublished or under review. Use the visibility badges and published notes as the source of truth." />
+      <Card><CardContent className="p-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between"><div><p className="text-sm font-semibold">Project summary</p><p className="text-sm text-muted-foreground leading-6">{project.client_portal_summary || project.client_visible_notes || 'This viewer contains the published documentation package approved for client review.'}</p></div><div className="flex gap-2 flex-wrap"><Badge>{clientVisibleProjectData.segments.length} segments</Badge><Badge variant="outline">{publishedMedia.length} published media files</Badge><Badge variant="outline">{clientMarkers.length} client-visible markers</Badge></div></CardContent></Card>
+      <OperatingGuide title="Client Project Viewer Guide" description="This client-facing workspace is organized to help you browse documented areas by segment and view type while keeping internal-only workflow data fully hidden." sections={[{ heading: 'Purpose', body: 'Use this viewer to review the published site-documentation package for a project in a structured, segment-based format.' }, { heading: 'Who Uses This', body: 'Client stakeholders, project reviewers, and authorized partner teams should use this view when they need approved documentation outputs.' }, { heading: 'When To Use It', body: 'Use this page after CCG has completed internal review and published materials for client access.' }, { heading: 'How To Browse', body: ['Use the segment filter to narrow the package to a specific corridor or location.', 'Use the view type filter to focus on the perspective that matters most, such as a specific media capture view.', 'Open media cards to review approved files and their client-facing notes.', 'Use markers as reviewed reference points that call out important moments or locations in the published package.'] }, { heading: 'What Is Intentionally Hidden', body: 'Internal notes, QA reasoning, draft records, validation states, and unpublished assets are intentionally removed from this viewer even if they exist internally.' }, { heading: 'Related Next Steps', body: 'If you need clarifications or additional coverage not shown here, contact your CCG project representative for the next update cycle.' }]} />
+      <WorkflowStepsPanel title="Suggested Client Workflow" steps={[{ title: 'Start with segments', description: 'Identify the street or segment you need so the rest of the viewer stays grounded in project geography.' }, { title: 'Open the relevant media', description: 'Review the media card details to understand view type, file type, and any approved client-facing notes.' }, { title: 'Use markers as reference points', description: 'Markers identify important locations or moments that have already been reviewed and approved for client viewing.' }]} />
       <VisibilityRulesPanel rules={VISIBILITY_EXPLANATIONS.map((rule) => ({ title: rule.label, description: rule.description }))} />
-
-      <div className="relative max-w-md"><Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search streets, intersections, or landmarks" className="pl-9" /></div>
-
-      <Tabs defaultValue="segments">
-        <TabsList className="mb-4"><TabsTrigger value="segments">Segments</TabsTrigger><TabsTrigger value="media">Media</TabsTrigger><TabsTrigger value="markers">Markers</TabsTrigger></TabsList>
-
-        <TabsContent value="segments">
-          {filteredSegments.length === 0 ? <EmptyState icon={MapPin} title="No matching segments" description="Try a different search term or wait for additional published segments." /> : <div className="grid gap-4">{filteredSegments.map((segment) => (
-            <Card key={segment.id}><CardContent className="p-4"><div className="flex items-start gap-3"><MapPin className="w-5 h-5 text-primary shrink-0" /><div><div className="flex items-center gap-2 flex-wrap"><p className="text-sm font-semibold">{segment.street_name} {segment.segment_name ? `— ${segment.segment_name}` : ''}</p><VisibilityBadge visibility={getVisibilityState(segment)} /></div><p className="text-xs text-muted-foreground">{segment.from_intersection || '?'} to {segment.to_intersection || '?'} · {SEGMENT_TYPE_LABELS[segment.segment_type] || segment.segment_type}</p>{segment.client_visible_notes && <p className="text-sm text-muted-foreground mt-2 leading-6">{segment.client_visible_notes}</p>}</div></div></CardContent></Card>
-          ))}</div>}
-        </TabsContent>
-
-        <TabsContent value="media">
-          {publishedMedia.length === 0 ? <EmptyState icon={FileVideo} title="No published media yet" description="Published media files will appear here after internal review and release." /> : <div className="space-y-4">{Object.entries(groupedMedia).map(([segmentId, items]) => (
-            <Card key={segmentId}><CardHeader className="pb-3"><CardTitle className="text-base">{segmentMap[segmentId]?.street_name || 'General project media'}</CardTitle></CardHeader><CardContent className="grid gap-4 md:grid-cols-2">{items.map((item) => { const MediaIcon = MEDIA_ICONS[item.media_type] || File; return <div key={item.id} className="rounded-lg border p-4"><div className="flex items-start gap-3"><div className="w-14 h-14 rounded bg-muted flex items-center justify-center shrink-0">{item.thumbnail_url ? <img src={item.thumbnail_url} alt="" className="w-14 h-14 rounded object-cover" /> : <MediaIcon className="w-5 h-5 text-muted-foreground" />}</div><div className="min-w-0"><div className="flex items-center gap-2 flex-wrap"><p className="text-sm font-semibold truncate">{item.media_title}</p><VisibilityBadge visibility={getVisibilityState(item, 'client_visible_notes', 'internal_notes', 'publish_to_client')} /></div><p className="text-xs text-muted-foreground">{VIEW_TYPE_LABELS[item.view_type] || item.view_type} · {item.media_type}</p><p className="text-sm text-muted-foreground mt-2 leading-6">{item.client_visible_notes || 'Published for client reference.'}</p>{item.file_url && <a href={item.file_url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline inline-block mt-2">Open published file →</a>}</div></div></div>; })}</CardContent></Card>
-          ))}</div>}
-        </TabsContent>
-
-        <TabsContent value="markers">
-          {clientMarkers.length === 0 ? <EmptyState icon={Bookmark} title="No client-visible markers" description="Approved markers will appear here when they are ready for client viewing." /> : <div className="space-y-4">{Object.entries(groupedMarkers).map(([segmentId, items]) => (
-            <Card key={segmentId}><CardHeader className="pb-3"><CardTitle className="text-base">{segmentMap[segmentId]?.street_name || 'General markers'}</CardTitle></CardHeader><CardContent className="space-y-3">{items.map(({ marker, mediaFile }) => (
-              <div key={marker.id} className="rounded-lg border p-4"><div className="flex items-start gap-3"><Bookmark className="w-4 h-4 text-primary mt-1" /><div><div className="flex items-center gap-2 flex-wrap"><p className="text-sm font-medium">{marker.marker_label}</p><VisibilityBadge visibility={getVisibilityState(marker)} /></div><p className="text-xs text-muted-foreground">{MARKER_TYPE_LABELS[marker.marker_type] || marker.marker_type}{mediaFile ? ` · ${mediaFile.media_title}` : ''}{marker.timestamp_seconds !== undefined ? ` · ${String(Math.floor(marker.timestamp_seconds / 60)).padStart(2, '0')}:${String(Math.floor(marker.timestamp_seconds % 60)).padStart(2, '0')}` : ''}</p><p className="text-sm text-muted-foreground mt-2 leading-6">{marker.client_visible_notes || 'Approved marker reference.'}</p></div></div></div>
-            ))}</CardContent></Card>
-          ))}</div>}
-        </TabsContent>
-      </Tabs>
+      <div className="grid gap-3 lg:grid-cols-[1.3fr_repeat(2,minmax(0,0.7fr))]"><div className="relative"><Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search streets, intersections, media, or marker text" className="pl-9" /></div><div><select value={selectedSegmentId} onChange={(event) => setSelectedSegmentId(event.target.value)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"><option value="all">All segments</option>{clientVisibleProjectData.segments.map((segment) => <option key={segment.id} value={segment.id}>{segment.street_name}</option>)}</select></div><div><select value={selectedViewType} onChange={(event) => setSelectedViewType(event.target.value)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"><option value="all">All view types</option>{viewTypeOptions.map((viewType) => <option key={viewType} value={viewType}>{VIEW_TYPE_LABELS[viewType] || viewType}</option>)}</select></div></div>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><div className="rounded-xl border p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">Visible segments</p><p className="mt-2 text-2xl font-semibold">{filteredSegments.length}</p><p className="mt-2 text-sm text-muted-foreground">Published segments matching your current filters.</p></div><div className="rounded-xl border p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">Media results</p><p className="mt-2 text-2xl font-semibold">{filteredMedia.length}</p><p className="mt-2 text-sm text-muted-foreground">Client-facing media records available in this filtered slice.</p></div><div className="rounded-xl border p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">Marker references</p><p className="mt-2 text-2xl font-semibold">{filteredMarkers.length}</p><p className="mt-2 text-sm text-muted-foreground">Reviewed marker references currently visible in the portal.</p></div><div className="rounded-xl border p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">View types</p><p className="mt-2 text-2xl font-semibold">{viewTypeOptions.length}</p><p className="mt-2 text-sm text-muted-foreground">Distinct published media perspectives in this project package.</p></div></div>
+      <Tabs defaultValue="segments"><TabsList className="mb-4"><TabsTrigger value="segments">Segments</TabsTrigger><TabsTrigger value="media">Media</TabsTrigger><TabsTrigger value="markers">Markers</TabsTrigger></TabsList><TabsContent value="segments">{filteredSegments.length === 0 ? <EmptyState icon={MapPin} title="No matching segments" description="Try a different search term or wait for additional published segments." /> : <div className="grid gap-4">{filteredSegments.map((segment) => <Card key={segment.id}><CardContent className="p-4"><div className="flex items-start gap-3"><MapPin className="w-5 h-5 text-primary shrink-0" /><div><div className="flex items-center gap-2 flex-wrap"><p className="text-sm font-semibold">{segment.street_name} {segment.segment_name ? `— ${segment.segment_name}` : ''}</p><VisibilityBadge visibility={getVisibilityState(segment)} /></div><p className="text-xs text-muted-foreground">{segment.from_intersection || '?'} to {segment.to_intersection || '?'} · {SEGMENT_TYPE_LABELS[segment.segment_type] || segment.segment_type}</p>{segment.client_visible_notes && <p className="text-sm text-muted-foreground mt-2 leading-6">{segment.client_visible_notes}</p>}</div></div></CardContent></Card>)}</div>}</TabsContent><TabsContent value="media">{filteredMedia.length === 0 ? <EmptyState icon={FileVideo} title="No published media yet" description="Published media files will appear here after internal review and release." /> : <div className="space-y-4">{Object.entries(groupedMedia).map(([segmentId, items]) => <Card key={segmentId}><CardHeader className="pb-3"><CardTitle className="text-base flex items-center gap-2"><Layers3 className="h-4 w-4 text-primary" /> {segmentMap[segmentId]?.street_name || 'General project media'}</CardTitle></CardHeader><CardContent className="grid gap-4 md:grid-cols-2">{items.map((item) => { const MediaIcon = MEDIA_ICONS[item.media_type] || File; return <div key={item.id} className="rounded-lg border p-4"><div className="flex items-start gap-3"><div className="w-14 h-14 rounded bg-muted flex items-center justify-center shrink-0">{item.thumbnail_url ? <img src={item.thumbnail_url} alt="" className="w-14 h-14 rounded object-cover" /> : <MediaIcon className="w-5 h-5 text-muted-foreground" />}</div><div className="min-w-0"><div className="flex items-center gap-2 flex-wrap"><p className="text-sm font-semibold truncate">{item.media_title}</p><VisibilityBadge visibility={getVisibilityState(item, 'client_visible_notes', 'internal_notes', 'publish_to_client')} /></div><p className="text-xs text-muted-foreground">{VIEW_TYPE_LABELS[item.view_type] || item.view_type} · {item.media_type}</p><p className="mt-2 text-sm leading-6 text-muted-foreground">{item.client_visible_notes || 'Published for client reference.'}</p><div className="mt-3 flex gap-2 flex-wrap"><Badge variant="outline">{segmentMap[item.street_segment_id]?.street_name || 'General media'}</Badge>{item.view_type && <Badge variant="outline">{VIEW_TYPE_LABELS[item.view_type] || item.view_type}</Badge>}</div>{item.file_url && <a href={item.file_url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline inline-block mt-3">Open published file →</a>}</div></div></div>; })}</CardContent></Card>)}</div>}</TabsContent><TabsContent value="markers">{filteredMarkers.length === 0 ? <EmptyState icon={Bookmark} title="No client-visible markers" description="Approved markers will appear here when they are ready for client viewing." /> : <div className="space-y-4">{Object.entries(groupedMarkers).map(([segmentId, items]) => <Card key={segmentId}><CardHeader className="pb-3"><CardTitle className="text-base">{segmentMap[segmentId]?.street_name || 'General markers'}</CardTitle></CardHeader><CardContent className="space-y-3">{items.map(({ marker, mediaFile }) => <div key={marker.id} className="rounded-lg border p-4"><div className="flex items-start gap-3"><Bookmark className="w-4 h-4 text-primary mt-1" /><div><div className="flex items-center gap-2 flex-wrap"><p className="text-sm font-medium">{marker.marker_label}</p><VisibilityBadge visibility={getVisibilityState(marker)} /></div><p className="text-xs text-muted-foreground">{MARKER_TYPE_LABELS[marker.marker_type] || marker.marker_type}{mediaFile ? ` · ${mediaFile.media_title}` : ''}{marker.timestamp_seconds !== undefined ? ` · ${String(Math.floor(marker.timestamp_seconds / 60)).padStart(2, '0')}:${String(Math.floor(marker.timestamp_seconds % 60)).padStart(2, '0')}` : ''}</p><p className="text-sm text-muted-foreground mt-2 leading-6">{marker.client_visible_notes || 'Approved marker reference.'}</p></div></div></div>)}</CardContent></Card>)}</div>}</TabsContent></Tabs>
     </div>
   );
 }
