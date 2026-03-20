@@ -1,0 +1,107 @@
+{
+  "name": "CaptureSession",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string"
+    },
+    "street_segment_id": {
+      "type": "string"
+    },
+    "session_name": {
+      "type": "string"
+    },
+    "session_code": {
+      "type": "string"
+    },
+    "assigned_documenter_id": {
+      "type": "string"
+    },
+    "session_status": {
+      "type": "string",
+      "enum": [
+        "planned",
+        "ready",
+        "in_progress",
+        "paused",
+        "uploaded",
+        "under_review",
+        "approved",
+        "published"
+      ],
+      "default": "planned"
+    },
+    "capture_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "planned_start_time": {
+      "type": "string"
+    },
+    "actual_start_time": {
+      "type": "string"
+    },
+    "actual_end_time": {
+      "type": "string"
+    },
+    "capture_method": {
+      "type": "string",
+      "enum": [
+        "photo",
+        "video",
+        "video_and_photo",
+        "video_360",
+        "mixed"
+      ],
+      "default": "video"
+    },
+    "view_type": {
+      "type": "string",
+      "enum": [
+        "profile",
+        "curb_line_edge_of_pavement",
+        "cross_section",
+        "360_walk",
+        "reverse_view",
+        "custom"
+      ],
+      "default": "profile"
+    },
+    "walking_direction_description": {
+      "type": "string"
+    },
+    "route_capture_mode": {
+      "type": "string",
+      "enum": [
+        "manual_route",
+        "timer_checkpoints",
+        "gps_future",
+        "imported_future"
+      ],
+      "default": "manual_route"
+    },
+    "weather_notes": {
+      "type": "string"
+    },
+    "field_notes_internal": {
+      "type": "string"
+    },
+    "field_notes_client_visible": {
+      "type": "string"
+    },
+    "qa_status": {
+      "type": "string",
+      "enum": [
+        "not_reviewed",
+        "needs_review",
+        "approved",
+        "flagged"
+      ],
+      "default": "not_reviewed"
+    }
+  },
+  "required": [
+    "project_id",
+    "session_name"
+  ]
+}
