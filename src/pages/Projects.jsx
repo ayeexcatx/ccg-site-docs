@@ -14,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Plus, FolderOpen, Search, ArrowRight, MapPin, Camera, FileVideo } from 'lucide-react';
+import { Plus, FolderOpen, Search, ArrowRight } from 'lucide-react';
 
 const emptyProject = {
   client_organization_id: '', project_name: '', project_code: '', contract_number: '', municipality: '', county: '', state: '',

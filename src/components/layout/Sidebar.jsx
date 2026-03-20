@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Building2, Users, FolderOpen, MapPin, Camera, Route, 
-  FileVideo, Bookmark, MapPinned, MessageSquare, Settings, BookOpen,
+  FileVideo, Bookmark, MapPinned, MessageSquare, BookOpen,
   ChevronLeft, ChevronRight, Shield, Eye
 } from 'lucide-react';
 import { useUserProfile } from '@/lib/useUserProfile';

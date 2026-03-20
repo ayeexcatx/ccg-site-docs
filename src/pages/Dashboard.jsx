@@ -1,6 +1,6 @@
 import React from 'react';
+import { getRoleAwareDashboardData } from '@/lib/base44Workflows';
 import { useQuery } from '@tanstack/react-query';
-import { base44 } from '@/api/base44Client';
 import { Link } from 'react-router-dom';
 import { useUserProfile } from '@/lib/useUserProfile';
 import PageHeader from '@/components/ui/PageHeader';
@@ -8,39 +8,18 @@ import StatCard from '@/components/ui/StatCard';
 import StatusBadge from '@/components/ui/StatusBadge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { FolderOpen, Camera, FileVideo, MessageSquare, Building2, MapPin, Plus, ArrowRight } from 'lucide-react';
+import { FolderOpen, FileVideo, MessageSquare, Building2, MapPin, Plus, ArrowRight } from 'lucide-react';
 
 export default function Dashboard() {
   const { profile, isCompanyUser, isClientUser, isLoading: profileLoading } = useUserProfile();
 
-  const { data: projects = [] } = useQuery({
-    queryKey: ['projects'],
-    queryFn: () => base44.entities.Project.list('-created_date', 50),
+  const { data: dashboardData = { projects: [], sessions: [], mediaFiles: [], reviewCases: [], clients: [] } } = useQuery({
+    queryKey: ['dashboard-data', profile?.role || 'anonymous'],
+    queryFn: () => getRoleAwareDashboardData({ role: profile?.role || 'anonymous' }),
+    enabled: !!profile,
   });
 
-  const { data: sessions = [] } = useQuery({
-    queryKey: ['sessions'],
-    queryFn: () => base44.entities.CaptureSession.list('-created_date', 20),
-    enabled: !!isCompanyUser,
-  });
-
-  const { data: mediaFiles = [] } = useQuery({
-    queryKey: ['media-count'],
-    queryFn: () => base44.entities.MediaFile.list('-created_date', 50),
-    enabled: !!isCompanyUser,
-  });
-
-  const { data: reviewCases = [] } = useQuery({
-    queryKey: ['review-cases'],
-    queryFn: () => base44.entities.ReviewCase.list('-created_date', 10),
-    enabled: !!isCompanyUser,
-  });
-
-  const { data: clients = [] } = useQuery({
-    queryKey: ['clients'],
-    queryFn: () => base44.entities.ClientOrganization.list('-created_date', 50),
-    enabled: !!isCompanyUser,
-  });
+  const { projects = [], sessions = [], mediaFiles = [], reviewCases = [], clients = [] } = dashboardData;
 
   if (profileLoading) {
     return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin" /></div>;

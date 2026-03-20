@@ -1,124 +1,113 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { base44 } from '@/api/base44Client';
 import { Link } from 'react-router-dom';
+import { base44 } from '@/api/base44Client';
 import PageHeader from '@/components/ui/PageHeader';
 import StatusBadge from '@/components/ui/StatusBadge';
 import StatCard from '@/components/ui/StatCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { ArrowLeft, MapPin, Camera, FileVideo, Bookmark, ArrowRight } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
+import { Badge } from '@/components/ui/badge';
+import { OperatingGuide, QAReviewChecklist, VisibilityRulesPanel, WorkflowStepsPanel, InstructionPanel } from '@/components/ui/OperatingGuidance';
+import { validateProjectReadiness } from '@/lib/base44Workflows';
+import { usePageInstructions } from '@/hooks/usePageInstructions';
+import { ArrowLeft, Bookmark, Camera, FileVideo, MapPin } from 'lucide-react';
 
 export default function ProjectDetail() {
-  const urlParams = new URLSearchParams(window.location.search);
-  const pathParts = window.location.pathname.split('/');
-  const projectId = pathParts[pathParts.length - 1];
+  const projectId = window.location.pathname.split('/').pop();
+  const { data: instructions = [] } = usePageInstructions('project_detail');
 
-  const { data: projects = [] } = useQuery({
-    queryKey: ['project', projectId],
-    queryFn: () => base44.entities.Project.filter({ id: projectId }),
-  });
+  const { data: projectResults = [] } = useQuery({ queryKey: ['project', projectId], queryFn: () => base44.entities.Project.filter({ id: projectId }) });
+  const { data: segments = [] } = useQuery({ queryKey: ['segments', projectId], queryFn: () => base44.entities.StreetSegment.filter({ project_id: projectId }), enabled: !!projectId });
+  const { data: sessions = [] } = useQuery({ queryKey: ['sessions', projectId], queryFn: () => base44.entities.CaptureSession.filter({ project_id: projectId }), enabled: !!projectId });
+  const { data: media = [] } = useQuery({ queryKey: ['media', projectId], queryFn: () => base44.entities.MediaFile.filter({ project_id: projectId }), enabled: !!projectId });
+  const { data: markers = [] } = useQuery({ queryKey: ['markers', projectId], queryFn: () => base44.entities.MediaMarker.filter({ project_id: projectId }), enabled: !!projectId });
+  const { data: routes = [] } = useQuery({ queryKey: ['routes-by-project', projectId], queryFn: () => base44.entities.RoutePath.filter({ project_id: projectId }), enabled: !!projectId });
 
-  const project = projects[0];
+  const project = projectResults[0];
+  const readiness = useMemo(() => validateProjectReadiness({ project, segments, sessions, media, markers, routes }), [project, segments, sessions, media, markers, routes]);
+  const mediaCounts = useMemo(() => media.reduce((accumulator, item) => { accumulator[item.media_type || 'unknown'] = (accumulator[item.media_type || 'unknown'] || 0) + 1; return accumulator; }, {}), [media]);
+  const markerCounts = useMemo(() => markers.reduce((accumulator, item) => { accumulator[item.confidence_level || 'unknown'] = (accumulator[item.confidence_level || 'unknown'] || 0) + 1; return accumulator; }, {}), [markers]);
 
-  const { data: segments = [] } = useQuery({
-    queryKey: ['segments', projectId],
-    queryFn: () => base44.entities.StreetSegment.filter({ project_id: projectId }),
-    enabled: !!projectId,
-  });
-
-  const { data: sessions = [] } = useQuery({
-    queryKey: ['sessions', projectId],
-    queryFn: () => base44.entities.CaptureSession.filter({ project_id: projectId }),
-    enabled: !!projectId,
-  });
-
-  const { data: media = [] } = useQuery({
-    queryKey: ['media', projectId],
-    queryFn: () => base44.entities.MediaFile.filter({ project_id: projectId }),
-    enabled: !!projectId,
-  });
-
-  const { data: markers = [] } = useQuery({
-    queryKey: ['markers', projectId],
-    queryFn: () => base44.entities.MediaMarker.filter({ project_id: projectId }),
-    enabled: !!projectId,
-  });
-
-  if (!project) {
-    return <div className="flex items-center justify-center h-64"><div className="w-6 h-6 border-2 border-muted border-t-primary rounded-full animate-spin" /></div>;
-  }
+  if (!project) return <div className="flex items-center justify-center h-64"><div className="w-6 h-6 border-2 border-muted border-t-primary rounded-full animate-spin" /></div>;
 
   return (
-    <div>
-      <Link to="/projects" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4">
-        <ArrowLeft className="w-4 h-4" /> Back to Projects
-      </Link>
-
-      <PageHeader title={project.project_name} description={`${project.project_code} · ${project.municipality || ''} ${project.county ? ', ' + project.county : ''} ${project.state || ''}`}>
+    <div className="space-y-6">
+      <Link to="/projects" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="w-4 h-4" /> Back to Projects</Link>
+      <PageHeader title={project.project_name} description={`${project.project_code} · ${project.municipality || ''} ${project.state || ''}`}>
         <StatusBadge status={project.project_status} />
         <StatusBadge status={project.documentation_status} />
         {project.published_to_client && <StatusBadge status="published" />}
       </PageHeader>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+      <OperatingGuide
+        title="Project Operations Guide"
+        description="This page summarizes operational health across route planning, field sessions, media readiness, marker confidence, and publication state so staff can see what happens next."
+        instructionCards={instructions}
+        sections={[
+          { heading: 'Purpose', body: 'Use this page to assess whether a project is still being prepared, actively documented, under review, or ready for client release.' },
+          { heading: 'Who Uses This', body: 'Project managers, QA leads, reviewers, and client-facing coordinators should use this page to monitor readiness and identify blockers.' },
+          { heading: 'When To Use It', body: 'Review this page during kickoff, before field deployment, during upload/review cycles, and before any client portal release.' },
+          { heading: 'How It Works', body: 'Operational metrics aggregate the existing entity model: street segments define scope, route paths define coverage, sessions indicate field execution, media files indicate ingestion progress, and marker confidence indicates review maturity.' },
+          { heading: 'Required Fields', body: 'Meaningful readiness depends on complete project metadata, routed segments, scheduled or completed sessions, uploaded media, and reviewed markers.' },
+          { heading: 'QA / Review Checklist', body: 'Check route completeness, session completeness, upload readiness, review readiness, and publish readiness before promising availability to stakeholders.' },
+          { heading: 'Client Visibility Rules', body: 'This page may summarize internal progress states that are not automatically client-facing. Publication should remain a deliberate action after internal checks pass.' },
+          { heading: 'Related Next Steps', body: 'Use the linked operational pages to close gaps: build routes, finish field sessions, review markers, and then publish client-safe deliverables.' },
+        ]}
+      />
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <StatCard title="Segments" value={segments.length} icon={MapPin} />
         <StatCard title="Sessions" value={sessions.length} icon={Camera} />
         <StatCard title="Media Files" value={media.length} icon={FileVideo} />
         <StatCard title="Markers" value={markers.length} icon={Bookmark} />
       </div>
 
-      {project.work_scope_summary && (
-        <Card className="mb-6">
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold">Work Scope</CardTitle></CardHeader>
-          <CardContent><p className="text-sm text-muted-foreground">{project.work_scope_summary}</p></CardContent>
-        </Card>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid gap-6 lg:grid-cols-2">
         <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base">Street Segments</CardTitle>
-              <Link to="/segments" className="text-xs text-primary hover:underline">Manage</Link>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {segments.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">No segments yet. Add street segments from the Segments page.</p>
-            ) : segments.map(s => (
-              <div key={s.id} className="flex items-center justify-between p-2 rounded hover:bg-muted/50">
-                <div>
-                  <p className="text-sm font-medium">{s.street_name}</p>
-                  <p className="text-xs text-muted-foreground">{s.segment_code} · {s.segment_type?.replace(/_/g, ' ')} · {s.from_intersection} to {s.to_intersection}</p>
-                </div>
-              </div>
+          <CardHeader><CardTitle className="text-base">Operational Readiness</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            {[
+              ['Route completeness', readiness.routeCompleteness],
+              ['Session completeness', readiness.sessionCompleteness],
+            ].map(([label, value]) => (
+              <div key={label} className="space-y-2"><div className="flex justify-between text-sm"><span>{label}</span><span>{value}%</span></div><Progress value={value} /></div>
             ))}
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-lg border p-3"><p className="text-xs uppercase tracking-wide text-muted-foreground">Uploads</p><Badge variant={readiness.uploadReadiness ? 'default' : 'secondary'}>{readiness.uploadReadiness ? 'Ready' : 'Pending'}</Badge></div>
+              <div className="rounded-lg border p-3"><p className="text-xs uppercase tracking-wide text-muted-foreground">Review</p><Badge variant={readiness.reviewReadiness ? 'default' : 'secondary'}>{readiness.reviewReadiness ? 'Ready' : 'Needs QA'}</Badge></div>
+              <div className="rounded-lg border p-3"><p className="text-xs uppercase tracking-wide text-muted-foreground">Publish</p><Badge variant={readiness.publishReadiness ? 'default' : 'secondary'}>{readiness.publishReadiness ? 'Ready' : 'Not ready'}</Badge></div>
+            </div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base">Capture Sessions</CardTitle>
-              <Link to="/sessions" className="text-xs text-primary hover:underline">Manage</Link>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {sessions.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">No sessions yet. Create capture sessions from the Sessions page.</p>
-            ) : sessions.map(s => (
-              <div key={s.id} className="flex items-center justify-between p-2 rounded hover:bg-muted/50">
-                <div>
-                  <p className="text-sm font-medium">{s.session_name}</p>
-                  <p className="text-xs text-muted-foreground">{s.capture_method} · {s.view_type?.replace(/_/g, ' ')} · {s.capture_date}</p>
-                </div>
-                <StatusBadge status={s.session_status} />
-              </div>
-            ))}
+          <CardHeader><CardTitle className="text-base">Operational Counts</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            <div><p className="text-sm font-medium mb-2">Media by type</p><div className="flex flex-wrap gap-2">{Object.entries(mediaCounts).map(([type, count]) => <Badge key={type} variant="outline">{type}: {count}</Badge>)}{Object.keys(mediaCounts).length === 0 && <p className="text-sm text-muted-foreground">No media yet.</p>}</div></div>
+            <div><p className="text-sm font-medium mb-2">Markers by confidence</p><div className="flex flex-wrap gap-2">{Object.entries(markerCounts).map(([type, count]) => <Badge key={type} variant="outline">{type}: {count}</Badge>)}{Object.keys(markerCounts).length === 0 && <p className="text-sm text-muted-foreground">No markers yet.</p>}</div></div>
           </CardContent>
         </Card>
       </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <WorkflowStepsPanel title="Operational Workflow" steps={[
+          { title: 'Plan and route segments', description: 'Every segment should gain a route path and session plan before field execution begins.' },
+          { title: 'Complete capture and upload', description: 'Sessions move the project toward upload readiness once media is ingested and tied back to the correct context.' },
+          { title: 'Review, confirm, and publish', description: 'Markers and media must pass internal QA before publication is marked ready.' },
+        ]} />
+        <QAReviewChecklist items={[
+          { title: 'Coverage checks', description: 'Compare the number of segments, routes, and sessions to identify missing operational scope.' },
+          { title: 'Marker maturity', description: 'A project should not be considered review-ready if most markers are still estimated.' },
+          { title: 'Client release discipline', description: 'Publish only after internal upload, review, and visibility checks are complete.' },
+        ]} />
+      </div>
+
+      <VisibilityRulesPanel rules={[
+        { title: 'Internal operations vs client release', description: 'A project can be operationally active without being client-ready. Publication should remain a separate control decision.' },
+        { title: 'Notes and narratives', description: 'Only curated client-facing notes should appear outside internal review pages.' },
+      ]} />
+      <InstructionPanel instructions={instructions} />
     </div>
   );
 }

@@ -1,170 +1,111 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { base44 } from '@/api/base44Client';
 import { Link } from 'react-router-dom';
+import { base44 } from '@/api/base44Client';
 import PageHeader from '@/components/ui/PageHeader';
-import HowThisWorks from '@/components/ui/HowThisWorks';
 import EmptyState from '@/components/ui/EmptyState';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, MapPin, FileVideo, Bookmark, Search, Image, Video, File } from 'lucide-react';
-import { VIEW_TYPE_LABELS, SEGMENT_TYPE_LABELS, MARKER_TYPE_LABELS } from '@/lib/constants';
+import { OperatingGuide, WorkflowStepsPanel } from '@/components/ui/OperatingGuidance';
+import { Bookmark, File, FileVideo, Image, MapPin, Search, Video, ArrowLeft } from 'lucide-react';
+import { MARKER_TYPE_LABELS, SEGMENT_TYPE_LABELS, VIEW_TYPE_LABELS } from '@/lib/constants';
 
 export default function ClientProjectViewer() {
-  const pathParts = window.location.pathname.split('/');
-  const projectId = pathParts[pathParts.length - 1];
+  const projectId = window.location.pathname.split('/').pop();
   const [search, setSearch] = useState('');
 
-  const { data: projects = [] } = useQuery({
-    queryKey: ['portal-project', projectId],
-    queryFn: () => base44.entities.Project.filter({ id: projectId }),
-  });
-  const project = projects[0];
+  const { data: projectResults = [] } = useQuery({ queryKey: ['portal-project', projectId], queryFn: () => base44.entities.Project.filter({ id: projectId }) });
+  const { data: segments = [] } = useQuery({ queryKey: ['portal-segments', projectId], queryFn: () => base44.entities.StreetSegment.filter({ project_id: projectId }), enabled: !!projectId });
+  const { data: media = [] } = useQuery({ queryKey: ['portal-media', projectId], queryFn: () => base44.entities.MediaFile.filter({ project_id: projectId }), enabled: !!projectId });
+  const { data: markers = [] } = useQuery({ queryKey: ['portal-markers', projectId], queryFn: () => base44.entities.MediaMarker.filter({ project_id: projectId }), enabled: !!projectId });
 
-  const { data: segments = [] } = useQuery({
-    queryKey: ['portal-segments', projectId],
-    queryFn: () => base44.entities.StreetSegment.filter({ project_id: projectId }),
-    enabled: !!projectId,
-  });
+  const project = projectResults[0];
+  const publishedMedia = media.filter((item) => item.publish_to_client);
+  const clientMarkers = markers.filter((marker) => marker.is_client_visible);
+  const filteredSegments = segments.filter((segment) => `${segment.street_name} ${segment.from_intersection} ${segment.to_intersection}`.toLowerCase().includes(search.toLowerCase()));
+  const segmentMap = Object.fromEntries(segments.map((segment) => [segment.id, segment]));
+  const groupedMedia = useMemo(() => publishedMedia.reduce((accumulator, item) => {
+    const key = item.street_segment_id || 'unassigned';
+    accumulator[key] ||= [];
+    accumulator[key].push(item);
+    return accumulator;
+  }, {}), [publishedMedia]);
+  const groupedMarkers = useMemo(() => clientMarkers.reduce((accumulator, marker) => {
+    const mediaFile = publishedMedia.find((item) => item.id === marker.media_file_id);
+    const key = mediaFile?.street_segment_id || 'unassigned';
+    accumulator[key] ||= [];
+    accumulator[key].push({ marker, mediaFile });
+    return accumulator;
+  }, {}), [clientMarkers, publishedMedia]);
 
-  const { data: media = [] } = useQuery({
-    queryKey: ['portal-media', projectId],
-    queryFn: () => base44.entities.MediaFile.filter({ project_id: projectId }),
-    enabled: !!projectId,
-  });
-
-  const { data: markers = [] } = useQuery({
-    queryKey: ['portal-markers', projectId],
-    queryFn: () => base44.entities.MediaMarker.filter({ project_id: projectId }),
-    enabled: !!projectId,
-  });
-
-  const publishedMedia = media.filter(m => m.publish_to_client);
-  const clientMarkers = markers.filter(m => m.is_client_visible);
-
-  const filteredSegments = segments.filter(s =>
-    s.street_name?.toLowerCase().includes(search.toLowerCase()) || s.from_intersection?.toLowerCase().includes(search.toLowerCase()) || s.to_intersection?.toLowerCase().includes(search.toLowerCase())
-  );
-
-  if (!project) {
-    return <div className="flex items-center justify-center h-64"><div className="w-6 h-6 border-2 border-muted border-t-primary rounded-full animate-spin" /></div>;
-  }
+  if (!project) return <div className="flex items-center justify-center h-64"><div className="w-6 h-6 border-2 border-muted border-t-primary rounded-full animate-spin" /></div>;
 
   const MEDIA_ICONS = { photo: Image, video: Video, video_360: Video, thumbnail: Image, preview_clip: Video, document: File, export: File };
 
   return (
-    <div>
-      <Link to="/portal/projects" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4">
-        <ArrowLeft className="w-4 h-4" /> Back to Projects
-      </Link>
+    <div className="space-y-6">
+      <Link to="/portal/projects" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="w-4 h-4" /> Back to Projects</Link>
+      <PageHeader title={project.project_name} description={`${project.municipality || ''} ${project.state || ''}`} />
 
-      <PageHeader title={project.project_name} description={`${project.municipality || ''} ${project.county ? `, ${project.county}` : ''} ${project.state || ''}`} />
+      <Card>
+        <CardContent className="p-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-sm font-semibold">Project summary</p>
+            <p className="text-sm text-muted-foreground leading-6">{project.client_portal_summary || project.client_visible_notes || 'This viewer contains the published documentation package approved for client review.'}</p>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <Badge>{segments.length} segments</Badge>
+            <Badge variant="outline">{publishedMedia.length} published media files</Badge>
+            <Badge variant="outline">{clientMarkers.length} client-visible markers</Badge>
+          </div>
+        </CardContent>
+      </Card>
 
-      {project.client_portal_summary && (
-        <Card className="mb-6">
-          <CardContent className="p-4"><p className="text-sm text-muted-foreground">{project.client_portal_summary}</p></CardContent>
-        </Card>
-      )}
-      {project.client_visible_notes && (
-        <Card className="mb-6">
-          <CardContent className="p-4"><p className="text-sm text-muted-foreground">{project.client_visible_notes}</p></CardContent>
-        </Card>
-      )}
+      <OperatingGuide
+        title="How To Use This Project Viewer"
+        description="This client-facing view is organized to help you browse documented areas, open media, and review approved reference markers without exposing internal production notes."
+        sections={[
+          { heading: 'Purpose', body: 'Use this viewer to review the published site-documentation package for a project in a structured, segment-based format.' },
+          { heading: 'Who Uses This', body: 'Client stakeholders, project reviewers, and authorized partner teams should use this view when they need approved documentation outputs.' },
+          { heading: 'When To Use It', body: 'Use this page after CCG has completed internal review and published materials for client access.' },
+          { heading: 'How It Works', body: 'Browse by segment to understand location coverage, switch to media to inspect published files, and use markers to jump to notable reference points described in client-safe language.' },
+          { heading: 'Required Fields', body: 'Published records include only approved client-facing fields such as titles, summaries, view types, and curated notes.' },
+          { heading: 'Client Visibility Rules', body: 'Internal-only notes, QA comments, and operational guidance are intentionally excluded from this viewer.' },
+          { heading: 'Related Next Steps', body: 'If you need clarifications or additional coverage not shown here, contact your CCG project representative for the next update cycle.' },
+        ]}
+      />
 
-      <HowThisWorks title="How to Browse Documentation" items={[
-        "Use the Segments tab to browse documented streets and areas.",
-        "The Media tab shows all published photos, videos, and documents.",
-        "The Markers tab lists searchable reference points within media files — intersections, landmarks, and more.",
-        "Use the search bar to find specific streets, intersections, or landmarks."
+      <WorkflowStepsPanel title="Suggested Client Workflow" steps={[
+        { title: 'Start with segments', description: 'Identify the street or segment you need so the rest of the viewer stays grounded in project geography.' },
+        { title: 'Open the relevant media', description: 'Review the media card details to understand view type, file type, and any approved client-facing notes.' },
+        { title: 'Use markers as reference points', description: 'Markers identify important locations or moments that have already been reviewed and approved for client viewing.' },
       ]} />
 
-      <div className="mb-4">
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Search streets, intersections, landmarks..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
-        </div>
-      </div>
+      <div className="relative max-w-md"><Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search streets, intersections, or landmarks" className="pl-9" /></div>
 
       <Tabs defaultValue="segments">
-        <TabsList className="mb-4">
-          <TabsTrigger value="segments">Segments ({segments.length})</TabsTrigger>
-          <TabsTrigger value="media">Media ({publishedMedia.length})</TabsTrigger>
-          <TabsTrigger value="markers">Markers ({clientMarkers.length})</TabsTrigger>
-        </TabsList>
+        <TabsList className="mb-4"><TabsTrigger value="segments">Segments</TabsTrigger><TabsTrigger value="media">Media</TabsTrigger><TabsTrigger value="markers">Markers</TabsTrigger></TabsList>
 
         <TabsContent value="segments">
-          {filteredSegments.length === 0 ? (
-            <EmptyState icon={MapPin} title="No segments" description="Street segments for this project will appear here." />
-          ) : (
-            <div className="grid gap-3">
-              {filteredSegments.map(s => (
-                <Card key={s.id}>
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-3">
-                      <MapPin className="w-5 h-5 text-primary shrink-0" />
-                      <div>
-                        <p className="text-sm font-semibold">{s.street_name} {s.segment_name ? `— ${s.segment_name}` : ''}</p>
-                        <p className="text-xs text-muted-foreground">{s.from_intersection || '?'} to {s.to_intersection || '?'} · {SEGMENT_TYPE_LABELS[s.segment_type] || s.segment_type}</p>
-                        {s.client_visible_notes && <p className="text-xs text-muted-foreground mt-1">{s.client_visible_notes}</p>}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
+          {filteredSegments.length === 0 ? <EmptyState icon={MapPin} title="No matching segments" description="Try a different search term or wait for additional published segments." /> : <div className="grid gap-4">{filteredSegments.map((segment) => (
+            <Card key={segment.id}><CardContent className="p-4"><div className="flex items-start gap-3"><MapPin className="w-5 h-5 text-primary shrink-0" /><div><p className="text-sm font-semibold">{segment.street_name} {segment.segment_name ? `— ${segment.segment_name}` : ''}</p><p className="text-xs text-muted-foreground">{segment.from_intersection || '?'} to {segment.to_intersection || '?'} · {SEGMENT_TYPE_LABELS[segment.segment_type] || segment.segment_type}</p>{segment.client_visible_notes && <p className="text-sm text-muted-foreground mt-2 leading-6">{segment.client_visible_notes}</p>}</div></div></CardContent></Card>
+          ))}</div>}
         </TabsContent>
 
         <TabsContent value="media">
-          {publishedMedia.length === 0 ? (
-            <EmptyState icon={FileVideo} title="No published media" description="Media files will be available once published by the documentation team." />
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {publishedMedia.map(m => {
-                const MediaIcon = MEDIA_ICONS[m.media_type] || File;
-                return (
-                  <Card key={m.id}>
-                    <CardContent className="p-4">
-                      <div className="flex items-start gap-3">
-                        <div className="w-12 h-12 rounded bg-muted flex items-center justify-center shrink-0">
-                          {m.thumbnail_url ? <img src={m.thumbnail_url} alt="" className="w-12 h-12 rounded object-cover" /> : <MediaIcon className="w-5 h-5 text-muted-foreground" />}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold truncate">{m.media_title}</p>
-                          <p className="text-xs text-muted-foreground">{VIEW_TYPE_LABELS[m.view_type] || m.view_type} · {m.media_type}</p>
-                          {m.client_visible_notes && <p className="text-xs text-muted-foreground mt-1">{m.client_visible_notes}</p>}
-                          {m.file_url && <a href={m.file_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline mt-1 inline-block">View File →</a>}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
+          {publishedMedia.length === 0 ? <EmptyState icon={FileVideo} title="No published media yet" description="Published media files will appear here after internal review and release." /> : <div className="space-y-4">{Object.entries(groupedMedia).map(([segmentId, items]) => (
+            <Card key={segmentId}><CardHeader className="pb-3"><CardTitle className="text-base">{segmentMap[segmentId]?.street_name || 'General project media'}</CardTitle></CardHeader><CardContent className="grid gap-4 md:grid-cols-2">{items.map((item) => { const MediaIcon = MEDIA_ICONS[item.media_type] || File; return <div key={item.id} className="rounded-lg border p-4"><div className="flex items-start gap-3"><div className="w-14 h-14 rounded bg-muted flex items-center justify-center shrink-0">{item.thumbnail_url ? <img src={item.thumbnail_url} alt="" className="w-14 h-14 rounded object-cover" /> : <MediaIcon className="w-5 h-5 text-muted-foreground" />}</div><div className="min-w-0"><p className="text-sm font-semibold truncate">{item.media_title}</p><p className="text-xs text-muted-foreground">{VIEW_TYPE_LABELS[item.view_type] || item.view_type} · {item.media_type}</p><p className="text-sm text-muted-foreground mt-2 leading-6">{item.client_visible_notes || 'Published for client reference.'}</p>{item.file_url && <a href={item.file_url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline inline-block mt-2">Open published file →</a>}</div></div></div>; })}</CardContent></Card>
+          ))}</div>}
         </TabsContent>
 
         <TabsContent value="markers">
-          {clientMarkers.length === 0 ? (
-            <EmptyState icon={Bookmark} title="No markers" description="Searchable markers for this project will appear here." />
-          ) : (
-            <div className="space-y-2">
-              {clientMarkers.map(m => (
-                <Card key={m.id}>
-                  <CardContent className="p-3 flex items-center gap-3">
-                    <Bookmark className="w-4 h-4 text-primary shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium">{m.marker_label}</p>
-                      <p className="text-xs text-muted-foreground">{MARKER_TYPE_LABELS[m.marker_type] || m.marker_type} {m.timestamp_seconds ? `· @ ${Math.floor(m.timestamp_seconds / 60)}:${String(Math.floor(m.timestamp_seconds % 60)).padStart(2, '0')}` : ''}</p>
-                      {m.client_visible_notes && <p className="text-xs text-muted-foreground mt-0.5">{m.client_visible_notes}</p>}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
+          {clientMarkers.length === 0 ? <EmptyState icon={Bookmark} title="No client-visible markers" description="Approved markers will appear here when they are ready for client viewing." /> : <div className="space-y-4">{Object.entries(groupedMarkers).map(([segmentId, items]) => (
+            <Card key={segmentId}><CardHeader className="pb-3"><CardTitle className="text-base">{segmentMap[segmentId]?.street_name || 'General markers'}</CardTitle></CardHeader><CardContent className="space-y-3">{items.map(({ marker, mediaFile }) => (
+              <div key={marker.id} className="rounded-lg border p-4"><div className="flex items-start gap-3"><Bookmark className="w-4 h-4 text-primary mt-1" /><div><p className="text-sm font-medium">{marker.marker_label}</p><p className="text-xs text-muted-foreground">{MARKER_TYPE_LABELS[marker.marker_type] || marker.marker_type}{mediaFile ? ` · ${mediaFile.media_title}` : ''}{marker.timestamp_seconds !== undefined ? ` · ${String(Math.floor(marker.timestamp_seconds / 60)).padStart(2, '0')}:${String(Math.floor(marker.timestamp_seconds % 60)).padStart(2, '0')}` : ''}</p><p className="text-sm text-muted-foreground mt-2 leading-6">{marker.client_visible_notes || 'Approved marker reference.'}</p></div></div></div>
+            ))}</CardContent></Card>
+          ))}</div>}
         </TabsContent>
       </Tabs>
     </div>

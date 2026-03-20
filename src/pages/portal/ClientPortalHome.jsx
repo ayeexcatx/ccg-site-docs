@@ -4,11 +4,9 @@ import { base44 } from '@/api/base44Client';
 import { Link } from 'react-router-dom';
 import PageHeader from '@/components/ui/PageHeader';
 import EmptyState from '@/components/ui/EmptyState';
-import StatCard from '@/components/ui/StatCard';
-import StatusBadge from '@/components/ui/StatusBadge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { FolderOpen, MapPin, Search, ArrowRight, Eye } from 'lucide-react';
+import { FolderOpen, Search, ArrowRight, Eye } from 'lucide-react';
 import { useState } from 'react';
 
 export default function ClientPortalHome() {
