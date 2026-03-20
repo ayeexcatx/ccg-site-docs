@@ -2,6 +2,14 @@
 module.exports = {
     darkMode: ["class"],
     content: ["./index.html", "./src/**/*.{ts,tsx,js,jsx}"],
+    safelist: [
+      'bg-blue-100', 'text-blue-800', 'bg-amber-100', 'text-amber-800',
+      'bg-emerald-100', 'text-emerald-800', 'bg-purple-100', 'text-purple-800',
+      'bg-teal-100', 'text-teal-800', 'bg-red-100', 'text-red-800',
+      'bg-gray-100', 'text-gray-500',
+      'bg-blue-600', 'hover:bg-blue-700', 'bg-emerald-600', 'hover:bg-emerald-700',
+      'bg-amber-600', 'hover:bg-amber-700', 'bg-red-600', 'hover:bg-red-700',
+    ],
   theme: {
   	extend: {
   		fontFamily: {
