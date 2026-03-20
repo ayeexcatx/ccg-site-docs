@@ -1,0 +1,24 @@
+{
+  "name": "MediaTagAssignment",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string"
+    },
+    "media_file_id": {
+      "type": "string"
+    },
+    "media_marker_id": {
+      "type": "string"
+    },
+    "tag_library_id": {
+      "type": "string"
+    },
+    "tag_value_override": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "tag_library_id"
+  ]
+}
