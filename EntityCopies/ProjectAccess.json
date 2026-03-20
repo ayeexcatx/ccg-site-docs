@@ -1,0 +1,48 @@
+{
+  "name": "ProjectAccess",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string"
+    },
+    "user_profile_id": {
+      "type": "string"
+    },
+    "access_role": {
+      "type": "string",
+      "enum": [
+        "editor",
+        "reviewer",
+        "viewer",
+        "client_manager",
+        "client_viewer"
+      ],
+      "default": "viewer"
+    },
+    "can_upload": {
+      "type": "boolean",
+      "default": false
+    },
+    "can_review": {
+      "type": "boolean",
+      "default": false
+    },
+    "can_publish": {
+      "type": "boolean",
+      "default": false
+    },
+    "can_invite": {
+      "type": "boolean",
+      "default": false
+    },
+    "active": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "required": [
+    "project_id",
+    "user_profile_id",
+    "access_role"
+  ]
+}
