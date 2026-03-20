@@ -1,0 +1,32 @@
+{
+  "name": "TagLibrary",
+  "type": "object",
+  "properties": {
+    "tag_name": {
+      "type": "string"
+    },
+    "tag_category": {
+      "type": "string",
+      "enum": [
+        "asset",
+        "location",
+        "issue",
+        "business",
+        "roadway_feature",
+        "custom"
+      ],
+      "default": "asset"
+    },
+    "description": {
+      "type": "string"
+    },
+    "active": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "required": [
+    "tag_name",
+    "tag_category"
+  ]
+}
