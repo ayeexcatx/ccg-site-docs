@@ -21,25 +21,25 @@ export default function Dashboard() {
   const { data: sessions = [] } = useQuery({
     queryKey: ['sessions'],
     queryFn: () => base44.entities.CaptureSession.list('-created_date', 20),
-    enabled: isCompanyUser,
+    enabled: !!isCompanyUser,
   });
 
   const { data: mediaFiles = [] } = useQuery({
     queryKey: ['media-count'],
     queryFn: () => base44.entities.MediaFile.list('-created_date', 50),
-    enabled: isCompanyUser,
+    enabled: !!isCompanyUser,
   });
 
   const { data: reviewCases = [] } = useQuery({
     queryKey: ['review-cases'],
     queryFn: () => base44.entities.ReviewCase.list('-created_date', 10),
-    enabled: isCompanyUser,
+    enabled: !!isCompanyUser,
   });
 
   const { data: clients = [] } = useQuery({
     queryKey: ['clients'],
     queryFn: () => base44.entities.ClientOrganization.list('-created_date', 50),
-    enabled: isCompanyUser,
+    enabled: !!isCompanyUser,
   });
 
   if (profileLoading) {
