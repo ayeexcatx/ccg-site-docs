@@ -178,6 +178,7 @@ export function getMarkerReviewSummary(params = {}) {
     { key: 'mediaId', getValue: (marker) => marker.media_file_id },
     { key: 'confidence', getValue: (marker) => marker.confidence_level },
     { key: 'visibility', getValue: (marker) => getVisibilityLabelForRecord(marker) },
+    { key: 'markerType', getValue: (marker) => marker.marker_type },
   ];
 
   const filteredMarkers = toArray(markers).filter((marker) => {
