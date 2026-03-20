@@ -14,12 +14,13 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { OperatingGuide, QAReviewChecklist, VisibilityRulesPanel, WorkflowStepsPanel, InstructionPanel } from '@/components/ui/OperatingGuidance';
+import { DocumentationPageIntro, QAReviewChecklist, VisibilityRulesPanel, WorkflowStepsPanel, InstructionPanel } from '@/components/ui/OperatingGuidance';
 import { usePageInstructions } from '@/hooks/usePageInstructions';
 import { useUserProfile } from '@/lib/useUserProfile';
 import { MARKER_TYPE_LABELS } from '@/lib/constants';
 import { getVisibilityState } from '@/lib/base44Workflows';
 import { AlertCircle, Bookmark, CheckCircle, Clock, Pencil, Plus, Search } from 'lucide-react';
+import { formatTimestamp } from '@/lib/displayUtils';
 
 const CONFIDENCE_COLORS = {
   manual: 'bg-blue-100 text-blue-800',
@@ -63,18 +64,20 @@ export default function MarkerReview() {
   const checkpointMap = Object.fromEntries(checkpoints.map((checkpoint) => [checkpoint.id, checkpoint]));
   const assetMap = Object.fromEntries(assetLocations.map((asset) => [asset.id, asset]));
 
+  const filterDefinitions = useMemo(() => ([
+    { key: 'projectId', getValue: (marker) => marker.project_id },
+    { key: 'sessionId', getValue: (marker) => mediaMap[marker.media_file_id]?.capture_session_id || 'unknown' },
+    { key: 'mediaId', getValue: (marker) => marker.media_file_id },
+    { key: 'confidence', getValue: (marker) => marker.confidence_level },
+    { key: 'visibility', getValue: (marker) => marker.is_client_visible ? 'client_visible' : 'internal_only' },
+  ]), [mediaMap]);
+
   const filteredMarkers = useMemo(() => markers.filter((marker) => {
     const media = mediaMap[marker.media_file_id];
-    const sessionId = media?.capture_session_id || 'unknown';
-    const visibility = marker.is_client_visible ? 'client_visible' : 'internal_only';
     const searchText = `${marker.marker_label} ${media?.media_title || ''}`.toLowerCase();
-    return (filters.projectId === 'all' || marker.project_id === filters.projectId)
-      && (filters.sessionId === 'all' || sessionId === filters.sessionId)
-      && (filters.mediaId === 'all' || marker.media_file_id === filters.mediaId)
-      && (filters.confidence === 'all' || marker.confidence_level === filters.confidence)
-      && (filters.visibility === 'all' || visibility === filters.visibility)
-      && searchText.includes(filters.search.toLowerCase());
-  }), [filters, markers, mediaMap]);
+    const matchesStructuredFilters = filterDefinitions.every(({ key, getValue }) => filters[key] === 'all' || getValue(marker) === filters[key]);
+    return matchesStructuredFilters && searchText.includes(filters.search.toLowerCase());
+  }), [filterDefinitions, filters, markers, mediaMap]);
 
   const groupedByMedia = useMemo(() => filteredMarkers.reduce((accumulator, marker) => {
     const media = mediaMap[marker.media_file_id] || { id: 'unassigned', media_title: 'Unassigned media' };
@@ -82,11 +85,6 @@ export default function MarkerReview() {
     accumulator[media.id].markers.push(marker);
     return accumulator;
   }, {}), [filteredMarkers, mediaMap]);
-
-  const formatTimestamp = (seconds) => {
-    if (seconds === null || seconds === undefined) return '—';
-    return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
-  };
 
   return (
     <div className="space-y-6">
@@ -106,20 +104,25 @@ export default function MarkerReview() {
         mistakesToAvoid="Do not leave draft notes in client-visible text, and do not turn on client visibility before timestamps and labels are confirmed."
       />
 
-      <OperatingGuide
-        title="Marker Review Guide"
-        description="Manual markers are placed directly by staff, estimated markers are inferred from route/session timing, and confirmed markers are review-approved references ready for broader downstream use."
+      <DocumentationPageIntro
         instructionCards={instructions}
-        sections={[
-          { heading: 'Purpose', body: 'Use this page to turn raw and estimated marker data into validated operational references tied to specific media files, checkpoints, and asset locations.' },
-          { heading: 'Who Uses This', body: 'Internal reviewers, QA staff, and project administrators should use this page. It is not intended for client editing or direct public review.' },
-          { heading: 'When To Use It', body: 'Review markers after media upload and after route/session information is stable. Reopen markers whenever event timing, checkpoint order, or client visibility rules change.' },
-          { heading: 'How It Works', body: ['Filter the working set by project, session, media file, confidence level, or visibility so reviewers work in a controlled batch.', 'Review grouped markers media-by-media, compare timestamps against playback, and update validation status once the marker is trustworthy.', 'Use checkpoint and asset references to connect the marker back to route planning and physical site context.'] },
-          { heading: 'Required Fields', body: 'Each marker should have a clear label, marker type, media file, timestamp, confidence level, and a deliberate client visibility decision. Validation status should reflect current review confidence.' },
-          { heading: 'QA / Review Checklist', body: 'Reviewers should confirm timestamp accuracy, confirm that marker labels match what the media actually shows, verify linked checkpoint/asset context, and promote markers to confirmed status only after direct comparison.' },
-          { heading: 'Client Visibility Rules', body: 'Internal notes can describe reviewer reasoning, timing uncertainty, or cleanup work. Client-visible notes should stay concise, objective, and free of internal shorthand.' },
-          { heading: 'Related Next Steps', body: 'Once markers are confirmed, the project detail page can show stronger readiness signals and the client viewer can present only approved, client-visible marker content.' },
-        ]}
+        header={{
+          title: 'Marker Review Operating Overview',
+          purpose: 'Use this page to turn raw, manual, and estimated markers into validated operational references tied to media, checkpoints, and asset context.',
+          role: 'Internal reviewers, QA staff, and project administrators should work here. Client users never review or edit markers from this screen.',
+          workflowSummary: 'Filter the batch, review grouped markers media-by-media, confirm timestamps and context, then approve only the markers that are ready for downstream visibility and publication workflows.',
+          visibilityRules: 'Internal notes may contain reviewer reasoning and uncertainty. Client-visible notes must stay concise, factual, and free of internal process language.',
+          nextSteps: 'After confirmation, use project readiness and client viewer surfaces to expose only approved marker content.'
+        }}
+        guide={{
+          title: 'Marker Review Guide',
+          description: 'Manual markers are placed directly by staff, estimated markers are inferred from route/session timing, and confirmed markers are review-approved references ready for broader downstream use.',
+          sections: [
+            { heading: 'When To Use It', body: 'Review markers after media upload and after route/session information is stable. Reopen markers whenever event timing, checkpoint order, or visibility rules change.' },
+            { heading: 'Required Fields', body: 'Each marker should have a clear label, marker type, media file, timestamp, confidence level, and a deliberate client visibility decision.' },
+            { heading: 'Future-ready Design', body: 'Structured marker review keeps the current Base44 model usable for future AI-assisted tagging and richer media-to-map experiences without changing the operational workflow.' },
+          ],
+        }}
       />
 
       <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">

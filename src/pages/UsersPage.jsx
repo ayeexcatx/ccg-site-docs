@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import PageHeader from '@/components/ui/PageHeader';
-import HowThisWorks from '@/components/ui/HowThisWorks';
+import { DocumentationPageIntro } from '@/components/ui/OperatingGuidance';
 import EmptyState from '@/components/ui/EmptyState';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -65,12 +65,22 @@ export default function UsersPage() {
         <Button size="sm" className="gap-2" onClick={() => { setForm(emptyUser); setShowForm(true); }}><Plus className="w-4 h-4" /> Add User</Button>
       </PageHeader>
 
-      <HowThisWorks items={[
-        "Super Admin and Company Admin are company-side roles with full management access.",
-        "Documenters are field staff who can access assigned projects and capture sessions.",
-        "Client Manager and Client Viewer are client-side roles linked to a specific client organization.",
-        "Always link client-side users to their organization to ensure proper portal access."
-      ]} />
+      <DocumentationPageIntro
+        header={{
+          title: 'User Profile Operating Overview',
+          purpose: 'User profiles extend authentication with app-specific role, organization, and workflow scoping data.',
+          role: 'Company admins maintain these records so staff and client users enter the correct operational surfaces without custom workarounds.',
+          workflowSummary: 'Create the profile, assign the correct role, attach client-side users to their organization when needed, and keep active/inactive status current.',
+          visibilityRules: 'Roles determine which internal workflows are available. Client-linked users must never be given internal-only operational access by leaving organization scope blank.',
+          nextSteps: 'After profile setup, verify that the user sees the correct project, session, and portal surfaces for their role.'
+        }}
+        guide={{
+          title: 'Role Assignment Guidance',
+          sections: [
+            { heading: 'Operational Reminder', body: 'Stay aligned with the current in-house role model. Do not create ad hoc roles when existing Base44 entities already define the intended workflow boundary.' },
+          ],
+        }}
+      />
 
       <div className="flex items-center gap-3 mb-4 flex-wrap">
         <div className="relative flex-1 max-w-sm">

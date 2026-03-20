@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import PageHeader from '@/components/ui/PageHeader';
-import HowThisWorks from '@/components/ui/HowThisWorks';
+import { DocumentationPageIntro } from '@/components/ui/OperatingGuidance';
 import StatusBadge from '@/components/ui/StatusBadge';
 import EmptyState from '@/components/ui/EmptyState';
 import { Card, CardContent } from '@/components/ui/card';
@@ -65,12 +65,22 @@ export default function CaptureSessions() {
         <Button size="sm" className="gap-2" onClick={() => { setForm(emptySession); setShowForm(true); }}><Plus className="w-4 h-4" /> New Session</Button>
       </PageHeader>
 
-      <HowThisWorks items={[
-        "Create a session for each planned documentation run (e.g., a specific video walk of a street).",
-        "Assign a documenter, select the capture method (photo, video, 360°), and define the view type.",
-        "Route capture mode determines how location data will be recorded — manual route drawing is the default in-house method.",
-        "After field capture, upload media and link it to the session for review and publishing."
-      ]} />
+      <DocumentationPageIntro
+        header={{
+          title: 'Capture Session Operating Overview',
+          purpose: 'Capture sessions represent individual field runs and connect project scope, assigned documenters, route planning, and downstream media review.',
+          role: 'Project coordinators, admins, and field leads manage this page to keep operational assignments and planned field work in sync.',
+          workflowSummary: 'Create the session, assign project and segment context, define capture method and date, then move the session through field execution, upload, QA, and publication readiness.',
+          visibilityRules: 'Internal field notes and QA status stay company-side. Client-facing text should be added separately and only after review.',
+          nextSteps: 'Open Route Editor for path planning, then use Field Session during live capture and Media Library after upload.'
+        }}
+        guide={{
+          title: 'Session Planning Guidance',
+          sections: [
+            { heading: 'How It Works', body: ['Create one session per planned field effort.', 'Keep route capture mode aligned with the current manual route workflow so route, event, and marker logic stay compatible.', 'Advance session status only when the actual operational handoff has occurred.'] },
+          ],
+        }}
+      />
 
       <div className="flex items-center gap-3 mb-4">
         <div className="relative flex-1 max-w-sm">

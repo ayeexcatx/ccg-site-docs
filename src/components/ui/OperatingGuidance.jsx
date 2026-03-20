@@ -1,7 +1,7 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { CheckCircle2, Eye, ListChecks, Route } from 'lucide-react';
+import { CheckCircle2, Eye, ListChecks, Route, ClipboardList, Users, ArrowRightCircle } from 'lucide-react';
 
 function Section({ title, body }) {
   if (!body) return null;
@@ -19,15 +19,62 @@ function Section({ title, body }) {
   );
 }
 
+function InfoCard({ icon: Icon, title, body }) {
+  if (!body) return null;
+  return (
+    <div className="rounded-xl border bg-muted/20 p-4">
+      <div className="mb-2 flex items-center gap-2">
+        <Icon className="h-4 w-4 text-primary" />
+        <p className="text-sm font-semibold text-foreground">{title}</p>
+      </div>
+      {Array.isArray(body)
+        ? body.map((item, index) => (
+            <p key={index} className="text-sm leading-6 text-muted-foreground">
+              {item}
+            </p>
+          ))
+        : <p className="text-sm leading-6 text-muted-foreground">{body}</p>}
+    </div>
+  );
+}
+
+export function PagePurposeHeader({
+  badge = 'Page Guide',
+  title,
+  purpose,
+  role,
+  workflowSummary,
+  visibilityRules,
+  nextSteps,
+}) {
+  return (
+    <Card className="border-primary/20 shadow-sm">
+      <CardHeader className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary">{badge}</Badge>
+        </div>
+        <CardTitle className="text-xl">{title}</CardTitle>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <InfoCard icon={ClipboardList} title="Page purpose" body={purpose} />
+          <InfoCard icon={Users} title="Intended user role" body={role} />
+          <InfoCard icon={Route} title="Workflow summary" body={workflowSummary} />
+          <InfoCard icon={Eye} title="Internal vs client-visible rules" body={visibilityRules} />
+          <InfoCard icon={ArrowRightCircle} title="Next steps" body={nextSteps} />
+        </div>
+      </CardHeader>
+    </Card>
+  );
+}
+
 export function OperatingGuide({ title = 'Operating Guide', description, sections = [], instructionCards = [] }) {
   return (
-    <Card className="mb-6 border-primary/20 shadow-sm">
+    <Card className="border-primary/20 shadow-sm">
       <CardHeader>
-        <div className="flex items-center gap-2 mb-2">
+        <div className="mb-2 flex items-center gap-2">
           <Badge variant="secondary">Operating Guide</Badge>
         </div>
         <CardTitle className="text-xl">{title}</CardTitle>
-        {description && <p className="text-sm leading-6 text-muted-foreground max-w-4xl">{description}</p>}
+        {description && <p className="max-w-4xl text-sm leading-6 text-muted-foreground">{description}</p>}
       </CardHeader>
       <CardContent className="space-y-5">
         {sections.map((section) => <Section key={section.heading} title={section.heading} body={section.body} />)}
@@ -35,14 +82,23 @@ export function OperatingGuide({ title = 'Operating Guide', description, section
           <div className="grid gap-3 md:grid-cols-2">
             {instructionCards.map((instruction) => (
               <div key={instruction.id || instruction.instruction_key} className="rounded-lg border bg-muted/30 p-4">
-                <p className="text-sm font-semibold mb-1">{instruction.instruction_title}</p>
-                <p className="text-sm leading-6 text-muted-foreground whitespace-pre-wrap">{instruction.instruction_body}</p>
+                <p className="mb-1 text-sm font-semibold">{instruction.instruction_title}</p>
+                <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{instruction.instruction_body}</p>
               </div>
             ))}
           </div>
         )}
       </CardContent>
     </Card>
+  );
+}
+
+export function DocumentationPageIntro({ header, guide, instructionCards = [] }) {
+  return (
+    <div className="space-y-4">
+      <PagePurposeHeader {...header} />
+      <OperatingGuide {...guide} instructionCards={instructionCards} />
+    </div>
   );
 }
 
@@ -109,7 +165,7 @@ export function InstructionPanel({ instructions = [] }) {
         {instructions.map((instruction) => (
           <div key={instruction.id || instruction.instruction_key} className="rounded-lg border p-3">
             <p className="text-sm font-medium">{instruction.instruction_title}</p>
-            <p className="text-sm text-muted-foreground leading-6 whitespace-pre-wrap">{instruction.instruction_body}</p>
+            <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{instruction.instruction_body}</p>
           </div>
         ))}
       </CardContent>
