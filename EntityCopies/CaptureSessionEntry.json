@@ -79,6 +79,33 @@
     },
     "updated_date": {
       "type": "string"
+    },
+    "frontage_side": {
+      "type": "string",
+      "enum": [
+        "both",
+        "north",
+        "south",
+        "east",
+        "west",
+        "inside",
+        "outside"
+      ],
+      "default": "both"
+    },
+    "generated_session_count": {
+      "type": "number",
+      "default": 0
+    },
+    "generation_status": {
+      "type": "string",
+      "enum": [
+        "not_started",
+        "generated",
+        "partially_generated",
+        "needs_review"
+      ],
+      "default": "not_started"
     }
   },
   "required": [

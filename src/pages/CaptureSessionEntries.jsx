@@ -13,35 +13,80 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DocumentationPageIntro } from '@/components/ui/OperatingGuidance';
 import { PAGE_GUIDANCE } from '@/lib/workflowGuidance';
-import { ClipboardList, Plus, Search } from 'lucide-react';
+import { formatLabel } from '@/lib/displayUtils';
+import { ClipboardList, Plus, Search, Sparkles } from 'lucide-react';
+
+const sessionTemplates = [
+  { key: 'include_right_profile', label: 'Right Profile', viewType: 'right_profile', captureMethod: 'video' },
+  { key: 'include_left_profile', label: 'Left Profile', viewType: 'left_profile', captureMethod: 'video' },
+  { key: 'include_curb_line', label: 'Curb Line / Edge of Pavement', viewType: 'curb_line_edge_of_pavement', captureMethod: 'video' },
+  { key: 'include_cross_section', label: 'Cross Section', viewType: 'cross_section', captureMethod: 'video' },
+  { key: 'include_360_walk', label: '360 Walk', viewType: '360_walk', captureMethod: 'video_360' },
+];
 
 const emptyEntry = {
-  capture_session_id: '',
   project_id: '',
-  entry_type: 'note',
-  title: '',
-  entry_text: '',
-  captured_at: '',
-  timeline_label: '',
-  gps_source: 'manual',
-  latitude: '',
-  longitude: '',
+  entry_type: 'roadway',
+  entry_name: '',
+  street_name: '',
+  from_location: '',
+  to_location: '',
+  address_range_start: '',
+  address_range_end: '',
+  municipality: '',
+  frontage_side: 'both',
+  notes: '',
+  include_right_profile: true,
+  include_left_profile: true,
+  include_curb_line: true,
+  include_cross_section: true,
+  include_360_walk: false,
+  recording_order: 1,
+  active: true,
 };
+
+function buildSessionPayload(entry, projectName, template, sequence) {
+  const descriptionParts = [
+    entry.street_name,
+    entry.from_location && entry.to_location ? `${entry.from_location} to ${entry.to_location}` : '',
+    entry.address_range_start || entry.address_range_end ? `${entry.address_range_start || '?'}-${entry.address_range_end || '?'}` : '',
+    entry.frontage_side && entry.frontage_side !== 'both' ? `${formatLabel(entry.frontage_side)} frontage` : '',
+  ].filter(Boolean);
+
+  return {
+    project_id: entry.project_id,
+    capture_session_entry_id: entry.id,
+    session_name: `${entry.entry_name} — ${template.label}`,
+    session_code: `${(projectName || 'PRJ').slice(0, 4).toUpperCase()}-${String(entry.recording_order || 0).padStart(2, '0')}-${sequence + 1}`,
+    session_status: 'planned',
+    capture_method: template.captureMethod,
+    default_view_type: template.viewType,
+    recording_order: Number(entry.recording_order || 0) * 10 + sequence,
+    session_area_description: descriptionParts.join(' · ') || entry.notes || entry.entry_name,
+    weather_notes: '',
+    field_notes_internal: `Generated from entry: ${entry.entry_name}`,
+    field_notes_client_visible: '',
+    gps_track_expected: true,
+    gps_sync_status: 'not_started',
+    timeline_index_status: 'not_started',
+    qa_status: 'not_reviewed',
+  };
+}
 
 export default function CaptureSessionEntries() {
   const [search, setSearch] = useState('');
-  const [sessionFilter, setSessionFilter] = useState('all');
+  const [projectFilter, setProjectFilter] = useState('all');
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyEntry);
   const queryClient = useQueryClient();
 
   const { data: entries = [], isLoading } = useQuery({
     queryKey: ['capture-session-entries'],
-    queryFn: () => base44.entities.CaptureSessionEntry.list('-created_date', 200),
+    queryFn: () => base44.entities.CaptureSessionEntry.list('-recording_order', 200),
   });
   const { data: sessions = [] } = useQuery({
     queryKey: ['capture-sessions'],
-    queryFn: () => base44.entities.CaptureSession.list('-created_date', 200),
+    queryFn: () => base44.entities.CaptureSession.list('recording_order', 300),
   });
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
@@ -57,25 +102,51 @@ export default function CaptureSessionEntries() {
     },
   });
 
-  const sessionMap = Object.fromEntries(sessions.map((session) => [session.id, session]));
+  const createSessionMut = useMutation({
+    mutationFn: async (entry) => {
+      const projectName = projects.find((project) => project.id === entry.project_id)?.project_name;
+      const selectedTemplates = sessionTemplates.filter((template) => entry[template.key]);
+      for (const [index, template] of selectedTemplates.entries()) {
+        await base44.entities.CaptureSession.create(buildSessionPayload(entry, projectName, template, index));
+      }
+      return selectedTemplates.length;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['capture-sessions'] });
+    },
+  });
+
   const projectMap = Object.fromEntries(projects.map((project) => [project.id, project]));
+  const sessionsByEntry = sessions.reduce((accumulator, session) => {
+    if (!session.capture_session_entry_id) return accumulator;
+    accumulator[session.capture_session_entry_id] = accumulator[session.capture_session_entry_id] || [];
+    accumulator[session.capture_session_entry_id].push(session);
+    return accumulator;
+  }, {});
 
   const filteredEntries = useMemo(() => entries.filter((entry) => {
-    const matchesSession = sessionFilter === 'all' || entry.capture_session_id === sessionFilter;
-    const haystack = [entry.title, entry.entry_text, entry.timeline_label, sessionMap[entry.capture_session_id]?.session_name, projectMap[entry.project_id]?.project_name]
-      .filter(Boolean)
-      .join(' ')
-      .toLowerCase();
-    const matchesSearch = haystack.includes(search.toLowerCase());
-    return matchesSession && matchesSearch;
-  }), [entries, sessionFilter, search, sessionMap, projectMap]);
+    const matchesProject = projectFilter === 'all' || entry.project_id === projectFilter;
+    const haystack = [
+      entry.entry_name,
+      entry.street_name,
+      entry.from_location,
+      entry.to_location,
+      entry.notes,
+      entry.municipality,
+      projectMap[entry.project_id]?.project_name,
+    ].filter(Boolean).join(' ').toLowerCase();
+    return matchesProject && haystack.includes(search.toLowerCase());
+  }), [entries, projectFilter, search, projectMap]);
+
+  const generatedSessionCount = sessions.filter((session) => session.capture_session_entry_id).length;
+  const activeEntryCount = entries.filter((entry) => entry.active !== false).length;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Capture Session Entries"
-        description="Create and review the atomic notes, events, and timeline records that describe what happened during a capture session."
-        helpText="Entries become the searchable timeline layer used by internal QA and the client portal."
+        description="Define roadway, range, and frontage capture entries first, then auto-generate the sessions crews will actually record."
+        helpText="Keep setup light: describe the corridor once, choose the standard views, and generate the right session stack in one click."
       >
         <Button size="sm" className="gap-2" onClick={() => setShowForm(true)}>
           <Plus className="w-4 h-4" /> Add Entry
@@ -84,80 +155,132 @@ export default function CaptureSessionEntries() {
 
       <DocumentationPageIntro guide={{ title: PAGE_GUIDANCE.capture_session_entries.title, sections: PAGE_GUIDANCE.capture_session_entries.sections }} />
 
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card><CardContent className="p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">Entries ready</p><p className="mt-2 text-2xl font-semibold">{activeEntryCount}</p><p className="mt-2 text-sm text-muted-foreground">Roadway and range definitions that can generate session work.</p></CardContent></Card>
+        <Card><CardContent className="p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">Generated sessions</p><p className="mt-2 text-2xl font-semibold">{generatedSessionCount}</p><p className="mt-2 text-sm text-muted-foreground">Sessions already spun up from entry templates.</p></CardContent></Card>
+        <Card><CardContent className="p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">360-ready entries</p><p className="mt-2 text-2xl font-semibold">{entries.filter((entry) => entry.include_360_walk).length}</p><p className="mt-2 text-sm text-muted-foreground">Entries configured to add the optional 360 walk pass.</p></CardContent></Card>
+      </div>
+
       <div className="grid gap-3 md:grid-cols-[1fr_240px]">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input className="pl-9" placeholder="Search title, note, session, project, or timeline label" value={search} onChange={(event) => setSearch(event.target.value)} />
+          <Input className="pl-9" placeholder="Search entry name, street, municipality, or notes" value={search} onChange={(event) => setSearch(event.target.value)} />
         </div>
-        <Select value={sessionFilter} onValueChange={setSessionFilter}>
+        <Select value={projectFilter} onValueChange={setProjectFilter}>
           <SelectTrigger><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All sessions</SelectItem>
-            {sessions.map((session) => <SelectItem key={session.id} value={session.id}>{session.session_name}</SelectItem>)}
+            <SelectItem value="all">All projects</SelectItem>
+            {projects.map((project) => <SelectItem key={project.id} value={project.id}>{project.project_name}</SelectItem>)}
           </SelectContent>
         </Select>
       </div>
 
       {isLoading ? <div className="flex justify-center py-12"><div className="h-6 w-6 animate-spin rounded-full border-2 border-muted border-t-primary" /></div> : filteredEntries.length === 0 ? (
-        <EmptyState icon={ClipboardList} title="No capture session entries yet" description="Start adding field notes, pairing checkpoints, and timeline-ready observations for each capture session." />
+        <EmptyState icon={ClipboardList} title="No session entries yet" description="Add a roadway, range, or frontage definition so the portal can generate the full session stack for you." />
       ) : (
         <div className="grid gap-4">
-          {filteredEntries.map((entry) => (
-            <Card key={entry.id}>
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <CardTitle className="text-base">{entry.title || 'Untitled entry'}</CardTitle>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {projectMap[entry.project_id]?.project_name || 'No project'} · {sessionMap[entry.capture_session_id]?.session_name || 'No session'}
-                    </p>
+          {filteredEntries.map((entry) => {
+            const generatedSessions = sessionsByEntry[entry.id] || [];
+            const enabledViews = sessionTemplates.filter((template) => entry[template.key]);
+            return (
+              <Card key={entry.id}>
+                <CardHeader className="pb-3">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <CardTitle className="text-base">{entry.entry_name || 'Untitled entry'}</CardTitle>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {projectMap[entry.project_id]?.project_name || 'No project'} · {formatLabel(entry.entry_type)}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <StatusBadge status={entry.active === false ? 'inactive' : 'active'} />
+                      <span className="rounded-full border px-2 py-1 text-xs text-muted-foreground">Order {entry.recording_order || 0}</span>
+                    </div>
                   </div>
-                  <StatusBadge status={entry.entry_type || 'note'} />
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm text-muted-foreground">
-                <p>{entry.entry_text || 'No entry text provided.'}</p>
-                <div className="flex flex-wrap gap-2 text-xs">
-                  {entry.timeline_label && <span className="rounded-full border px-2 py-1">Timeline: {entry.timeline_label}</span>}
-                  {entry.captured_at && <span className="rounded-full border px-2 py-1">Captured: {entry.captured_at}</span>}
-                  {entry.gps_source && <span className="rounded-full border px-2 py-1">GPS source: {entry.gps_source}</span>}
-                  {(entry.latitude || entry.longitude) && <span className="rounded-full border px-2 py-1">{entry.latitude || '?'} , {entry.longitude || '?'}</span>}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardHeader>
+                <CardContent className="space-y-4 text-sm text-muted-foreground">
+                  <div className="grid gap-3 lg:grid-cols-[1.1fr_0.9fr]">
+                    <div className="rounded-lg border p-3">
+                      <p><span className="font-medium text-foreground">Street / range:</span> {entry.street_name || 'Custom area'}{entry.from_location || entry.to_location ? ` · ${entry.from_location || '?'} to ${entry.to_location || '?'}` : ''}</p>
+                      {(entry.address_range_start || entry.address_range_end) && <p><span className="font-medium text-foreground">Addresses:</span> {entry.address_range_start || '?'} to {entry.address_range_end || '?'}</p>}
+                      <p><span className="font-medium text-foreground">Frontage:</span> {formatLabel(entry.frontage_side || 'both')}</p>
+                      <p><span className="font-medium text-foreground">Notes:</span> {entry.notes || 'No extra setup notes.'}</p>
+                    </div>
+                    <div className="rounded-lg border p-3">
+                      <p className="font-medium text-foreground">Generated session set</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {enabledViews.map((template) => <span key={template.key} className="rounded-full border px-2 py-1 text-xs">{template.label}</span>)}
+                      </div>
+                      <p className="mt-3 text-xs text-muted-foreground">Already generated: {generatedSessions.length}</p>
+                    </div>
+                  </div>
+                  {generatedSessions.length > 0 && (
+                    <div className="rounded-lg border p-3">
+                      <p className="mb-2 font-medium text-foreground">Current generated sessions</p>
+                      <div className="flex flex-wrap gap-2">
+                        {generatedSessions.map((session) => <span key={session.id} className="rounded-full border px-2 py-1 text-xs">{session.session_name}</span>)}
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex justify-end">
+                    <Button className="gap-2" onClick={() => createSessionMut.mutate(entry)} disabled={createSessionMut.isPending || enabledViews.length === 0}>
+                      <Sparkles className="h-4 w-4" /> Generate Sessions
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
 
       <Dialog open={showForm} onOpenChange={(open) => { if (!open) { setShowForm(false); setForm(emptyEntry); } }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>New capture session entry</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="grid gap-3 md:grid-cols-2">
-              <div><Label>Session *</Label><Select value={form.capture_session_id || 'none'} onValueChange={(value) => {
-                const session = sessions.find((item) => item.id === value);
-                setForm((current) => ({ ...current, capture_session_id: value === 'none' ? '' : value, project_id: session?.project_id || '' }));
-              }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">Select session</SelectItem>{sessions.map((session) => <SelectItem key={session.id} value={session.id}>{session.session_name}</SelectItem>)}</SelectContent></Select></div>
-              <div><Label>Entry type</Label><Select value={form.entry_type} onValueChange={(value) => setForm((current) => ({ ...current, entry_type: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{['note', 'observation', 'gps_pairing', 'issue', 'milestone'].map((value) => <SelectItem key={value} value={value}>{value.replace(/_/g, ' ')}</SelectItem>)}</SelectContent></Select></div>
+              <div><Label>Project *</Label><Select value={form.project_id || 'none'} onValueChange={(value) => setForm((current) => ({ ...current, project_id: value === 'none' ? '' : value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">Select project</SelectItem>{projects.map((project) => <SelectItem key={project.id} value={project.id}>{project.project_name}</SelectItem>)}</SelectContent></Select></div>
+              <div><Label>Entry type</Label><Select value={form.entry_type} onValueChange={(value) => setForm((current) => ({ ...current, entry_type: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{['roadway', 'range', 'frontage', 'intersection', 'custom'].map((value) => <SelectItem key={value} value={value}>{formatLabel(value)}</SelectItem>)}</SelectContent></Select></div>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
-              <div><Label>Title *</Label><Input value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} /></div>
-              <div><Label>Captured at</Label><Input type="datetime-local" value={form.captured_at} onChange={(event) => setForm((current) => ({ ...current, captured_at: event.target.value }))} /></div>
+              <div><Label>Entry name *</Label><Input value={form.entry_name} onChange={(event) => setForm((current) => ({ ...current, entry_name: event.target.value }))} placeholder="Main Street from Oak Ave to Elm Ave" /></div>
+              <div><Label>Street / corridor</Label><Input value={form.street_name} onChange={(event) => setForm((current) => ({ ...current, street_name: event.target.value }))} placeholder="Main Street" /></div>
             </div>
-            <div><Label>Entry text</Label><Textarea value={form.entry_text} onChange={(event) => setForm((current) => ({ ...current, entry_text: event.target.value }))} /></div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div><Label>From</Label><Input value={form.from_location} onChange={(event) => setForm((current) => ({ ...current, from_location: event.target.value }))} placeholder="Oak Ave" /></div>
+              <div><Label>To</Label><Input value={form.to_location} onChange={(event) => setForm((current) => ({ ...current, to_location: event.target.value }))} placeholder="Elm Ave" /></div>
+            </div>
             <div className="grid gap-3 md:grid-cols-3">
-              <div><Label>Timeline label</Label><Input value={form.timeline_label} onChange={(event) => setForm((current) => ({ ...current, timeline_label: event.target.value }))} placeholder="e.g. Approaching Elm/Pine" /></div>
-              <div><Label>GPS source</Label><Select value={form.gps_source} onValueChange={(value) => setForm((current) => ({ ...current, gps_source: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{['manual', 'gpx', 'fit', 'device_live', 'derived'].map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}</SelectContent></Select></div>
-              <div><Label>Project</Label><Select value={form.project_id || 'none'} onValueChange={(value) => setForm((current) => ({ ...current, project_id: value === 'none' ? '' : value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">Select project</SelectItem>{projects.map((project) => <SelectItem key={project.id} value={project.id}>{project.project_name}</SelectItem>)}</SelectContent></Select></div>
+              <div><Label>Address range start</Label><Input value={form.address_range_start} onChange={(event) => setForm((current) => ({ ...current, address_range_start: event.target.value }))} placeholder="100" /></div>
+              <div><Label>Address range end</Label><Input value={form.address_range_end} onChange={(event) => setForm((current) => ({ ...current, address_range_end: event.target.value }))} placeholder="198" /></div>
+              <div><Label>Frontage</Label><Select value={form.frontage_side} onValueChange={(value) => setForm((current) => ({ ...current, frontage_side: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{['both', 'north', 'south', 'east', 'west', 'inside', 'outside'].map((value) => <SelectItem key={value} value={value}>{formatLabel(value)}</SelectItem>)}</SelectContent></Select></div>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
-              <div><Label>Latitude</Label><Input value={form.latitude} onChange={(event) => setForm((current) => ({ ...current, latitude: event.target.value }))} /></div>
-              <div><Label>Longitude</Label><Input value={form.longitude} onChange={(event) => setForm((current) => ({ ...current, longitude: event.target.value }))} /></div>
+              <div><Label>Municipality</Label><Input value={form.municipality} onChange={(event) => setForm((current) => ({ ...current, municipality: event.target.value }))} /></div>
+              <div><Label>Recording order</Label><Input type="number" value={form.recording_order} onChange={(event) => setForm((current) => ({ ...current, recording_order: Number(event.target.value || 0) }))} /></div>
+            </div>
+            <div><Label>Field note / setup note</Label><Textarea value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Example: Stay on the east curb line first, then return for cross sections at signalized intersections." /></div>
+            <div className="space-y-3 rounded-lg border p-4">
+              <div>
+                <p className="text-sm font-medium text-foreground">Standard recording views</p>
+                <p className="text-xs text-muted-foreground">Turn on the views you want created when you use Generate Sessions.</p>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                {sessionTemplates.map((template) => (
+                  <label key={template.key} className="flex items-start gap-3 rounded-lg border p-3 text-sm">
+                    <input type="checkbox" className="mt-1" checked={Boolean(form[template.key])} onChange={(event) => setForm((current) => ({ ...current, [template.key]: event.target.checked }))} />
+                    <div>
+                      <p className="font-medium text-foreground">{template.label}</p>
+                      <p className="text-xs text-muted-foreground">{template.captureMethod === 'video_360' ? 'Optional 360 pass.' : 'Standard generated recording session.'}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setShowForm(false); setForm(emptyEntry); }}>Cancel</Button>
-            <Button onClick={() => createMut.mutate(form)} disabled={!form.capture_session_id || !form.title}>Save Entry</Button>
+            <Button onClick={() => createMut.mutate(form)} disabled={!form.project_id || !form.entry_name}>Save Entry</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

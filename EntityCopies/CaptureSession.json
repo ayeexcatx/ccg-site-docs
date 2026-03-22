@@ -131,6 +131,26 @@
     },
     "updated_date": {
       "type": "string"
+    },
+    "video_upload_status": {
+      "type": "string",
+      "enum": [
+        "not_uploaded",
+        "uploaded",
+        "linked",
+        "needs_review"
+      ],
+      "default": "not_uploaded"
+    },
+    "session_handoff_status": {
+      "type": "string",
+      "enum": [
+        "not_started",
+        "ready_for_upload",
+        "uploaded_for_pairing",
+        "indexed"
+      ],
+      "default": "not_started"
     }
   },
   "required": [

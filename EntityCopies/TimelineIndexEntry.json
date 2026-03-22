@@ -75,6 +75,22 @@
     },
     "updated_date": {
       "type": "string"
+    },
+    "review_status": {
+      "type": "string",
+      "enum": [
+        "needs_review",
+        "confirmed",
+        "edited",
+        "rejected"
+      ],
+      "default": "needs_review"
+    },
+    "search_keywords": {
+      "type": "string"
+    },
+    "rejection_reason": {
+      "type": "string"
     }
   },
   "required": [
