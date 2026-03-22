@@ -1,4 +1,4 @@
-const DEFAULT_STORAGE_ADAPTER_ORDER = ['base44_native', 'in_house_object_store_future', 'enterprise_archive_future'];
+const DEFAULT_STORAGE_ADAPTER_ORDER = ['native_upload', 'future_connector_storage', 'external_link'];
 
 export const FUTURE_FEATURE_BLUEPRINTS = {
   viewer360: {
@@ -56,29 +56,29 @@ export const FUTURE_FEATURE_BLUEPRINTS = {
 };
 
 export const STORAGE_ADAPTER_BLUEPRINTS = {
-  base44_native: {
-    key: 'base44_native',
+  native_upload: {
+    key: 'native_upload',
     label: 'Base44 Native Upload',
     family: 'in_house_default',
     isDefault: true,
     capabilities: ['upload', 'thumbnail', 'publish'],
     adminNotes: 'Use this today for normal uploads and direct file registration inside the current stack.',
   },
-  in_house_object_store_future: {
-    key: 'in_house_object_store_future',
+  future_connector_storage: {
+    key: 'future_connector_storage',
     label: 'In-house Object Store (Future)',
     family: 'in_house_preferred',
     isDefault: false,
     capabilities: ['register_only', 'stream', 'archive', 'publish'],
     adminNotes: 'Reserved for a future internal object-storage adapter that can handle larger media while preserving current metadata and review workflows.',
   },
-  enterprise_archive_future: {
-    key: 'enterprise_archive_future',
-    label: 'Enterprise Archive Adapter (Future)',
+  external_link: {
+    key: 'external_link',
+    label: 'Approved External Registration',
     family: 'approved_external',
     isDefault: false,
     capabilities: ['register_only', 'archive'],
-    adminNotes: 'Placeholder for an approved enterprise archive integration when very large source files cannot remain in the default store.',
+    adminNotes: 'Use when the operational record must stay in the app but the original master remains in an approved external archive or storage platform.',
   },
 };
 
@@ -143,7 +143,7 @@ export function buildMarkerSuggestionContext({ marker = null, mediaFile = null, 
 }
 
 export function resolveStorageAdapter(storageMode, registry = STORAGE_ADAPTER_BLUEPRINTS) {
-  return registry[storageMode] || registry.base44_native || null;
+  return registry[storageMode] || registry.native_upload || null;
 }
 
 function safeJsonPointCount(polylineJson) {
