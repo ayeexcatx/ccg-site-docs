@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { DocumentationPageIntro } from '@/components/ui/OperatingGuidance';
 import { PAGE_GUIDANCE } from '@/lib/workflowGuidance';
 import { formatLabel, formatTimestamp } from '@/lib/displayUtils';
-import { FileVideo, Plus, Search } from 'lucide-react';
+import { FileVideo, Link2, Plus, Search } from 'lucide-react';
 
 const emptyMedia = {
   project_id: '',
@@ -41,6 +41,7 @@ const emptyTrack = {
   original_filename: '',
   upload_status: 'uploaded',
   parsing_status: 'not_started',
+  pairing_status: 'unpaired',
   notes: '',
 };
 
@@ -59,11 +60,18 @@ export default function MediaLibrary() {
   const { data: syncs = [] } = useQuery({ queryKey: ['session-syncs'], queryFn: () => base44.entities.SessionSync.list('-created_date', 200) });
   const { data: cutPoints = [] } = useQuery({ queryKey: ['suggested-cut-points'], queryFn: () => base44.entities.SuggestedCutPoint.list('-created_date', 300) });
 
-  const createMediaMut = useMutation({ mutationFn: (data) => base44.entities.MediaFile.create(data), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['media-files'] }); setShowMediaForm(false); setMediaForm(emptyMedia); } });
+  const createMediaMut = useMutation({ mutationFn: async (data) => {
+    const result = await base44.entities.MediaFile.create(data);
+    await base44.entities.CaptureSession.update(data.capture_session_id, { video_upload_status: 'uploaded' });
+    return result;
+  }, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['media-files'] }); queryClient.invalidateQueries({ queryKey: ['capture-sessions'] }); setShowMediaForm(false); setMediaForm(emptyMedia); } });
+
   const createTrackMut = useMutation({ mutationFn: (data) => base44.entities.GpsTrack.create(data), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['gps-tracks'] }); setShowTrackForm(false); setTrackForm(emptyTrack); } });
   const pairMediaMut = useMutation({ mutationFn: async ({ file, gpsTrackId }) => {
     await base44.entities.MediaFile.update(file.id, { gps_track_id: gpsTrackId, track_pairing_status: gpsTrackId ? 'paired' : 'unpaired' });
     if (gpsTrackId) {
+      await base44.entities.GpsTrack.update(gpsTrackId, { pairing_status: 'paired', capture_session_id: file.capture_session_id });
+      await base44.entities.CaptureSession.update(file.capture_session_id, { gps_sync_status: 'pending', session_handoff_status: 'uploaded_for_pairing' });
       await base44.entities.SessionSync.create({
         project_id: file.project_id,
         capture_session_id: file.capture_session_id,
@@ -75,6 +83,8 @@ export default function MediaLibrary() {
   }, onSuccess: () => {
     queryClient.invalidateQueries({ queryKey: ['media-files'] });
     queryClient.invalidateQueries({ queryKey: ['session-syncs'] });
+    queryClient.invalidateQueries({ queryKey: ['gps-tracks'] });
+    queryClient.invalidateQueries({ queryKey: ['capture-sessions'] });
   } });
 
   const projectMap = Object.fromEntries(projects.map((project) => [project.id, project.project_name]));
@@ -102,7 +112,7 @@ export default function MediaLibrary() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Media Library" description="Upload video and GPX/FIT files, pair each asset to the right session, and track sync, indexing, and suggested cut status in one place." helpText="The pairing workflow is now session-first: connect media and tracks directly to the generated session that created them.">
+      <PageHeader title="Media Library" description="Upload video and GPX/FIT files, pair both to the generated session, review sync status, track indexing, and surface suggested cut points." helpText="The center of the workflow is now video + track pairing for each generated session.">
         <div className="flex gap-2">
           <Button size="sm" variant="outline" className="gap-2" onClick={() => setShowTrackForm(true)}><Plus className="h-4 w-4" /> Add GPX/FIT</Button>
           <Button size="sm" className="gap-2" onClick={() => setShowMediaForm(true)}><Plus className="h-4 w-4" /> Add Video</Button>
@@ -133,7 +143,7 @@ export default function MediaLibrary() {
                 <CardContent className="space-y-4 text-sm text-muted-foreground">
                   <div className="grid gap-3 lg:grid-cols-[1.15fr_0.85fr]">
                     <div className="space-y-3">
-                      <div className="rounded-lg border p-3">
+                      <div className="rounded-lg border p-3 space-y-2">
                         <p><span className="font-medium text-foreground">Filename:</span> {file.original_filename || 'No source filename provided.'}</p>
                         <p><span className="font-medium text-foreground">Track pairing:</span> {pairedTrack ? `${pairedTrack.track_name || pairedTrack.original_filename} (${formatLabel(pairedTrack.source_type)})` : 'Not paired yet'}</p>
                         <p><span className="font-medium text-foreground">Sync preview:</span> {sync ? `${formatLabel(sync.sync_mode)} · offset ${sync.offset_seconds || 0}s` : 'No sync record yet'}</p>
@@ -143,7 +153,7 @@ export default function MediaLibrary() {
                     </div>
                     <div className="rounded-lg border p-3 space-y-3">
                       <div>
-                        <Label>Pair track to session</Label>
+                        <Label>Pair GPX/FIT to session video</Label>
                         <Select value={file.gps_track_id || 'none'} onValueChange={(value) => pairMediaMut.mutate({ file, gpsTrackId: value === 'none' ? '' : value })}>
                           <SelectTrigger><SelectValue /></SelectTrigger>
                           <SelectContent>
@@ -152,10 +162,11 @@ export default function MediaLibrary() {
                           </SelectContent>
                         </Select>
                       </div>
-                      <div className="text-xs text-muted-foreground">
-                        <p className="font-medium text-foreground">Status preview</p>
-                        <p>{pairedTrack ? 'Paired and ready for sync review.' : 'Waiting for GPX/FIT upload or manual selection.'}</p>
+                      <div className="rounded-lg bg-muted/30 p-3 text-xs text-muted-foreground">
+                        <p className="flex items-center gap-1 font-medium text-foreground"><Link2 className="h-3 w-3" /> Status preview</p>
+                        <p className="mt-2">{pairedTrack ? 'Paired and ready for sync review.' : 'Waiting for GPX/FIT upload or manual selection.'}</p>
                         <p className="mt-2">Suggested cuts: {mediaCutPoints.length}</p>
+                        <p className="mt-2">Session indexing status: {formatLabel(file.timeline_index_status || 'not_started')}</p>
                         {sync?.video_start_time && <p className="mt-2">Video start: {new Date(sync.video_start_time).toLocaleString()}</p>}
                       </div>
                     </div>
@@ -170,10 +181,10 @@ export default function MediaLibrary() {
 
       <Dialog open={showMediaForm} onOpenChange={(open) => { if (!open) { setShowMediaForm(false); setMediaForm(emptyMedia); } }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>New media file</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>New video file</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="grid gap-3 md:grid-cols-2"><div><Label>Project *</Label><Select value={mediaForm.project_id || 'none'} onValueChange={(value) => setMediaForm((current) => ({ ...current, project_id: value === 'none' ? '' : value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">Select project</SelectItem>{projects.map((project) => <SelectItem key={project.id} value={project.id}>{project.project_name}</SelectItem>)}</SelectContent></Select></div><div><Label>Session *</Label><Select value={mediaForm.capture_session_id || 'none'} onValueChange={(value) => setMediaForm((current) => ({ ...current, capture_session_id: value === 'none' ? '' : value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">Select session</SelectItem>{sessions.filter((session) => !mediaForm.project_id || session.project_id === mediaForm.project_id).map((session) => <SelectItem key={session.id} value={session.id}>{session.session_name}</SelectItem>)}</SelectContent></Select></div></div>
-            <div className="grid gap-3 md:grid-cols-2"><div><Label>Media title *</Label><Input value={mediaForm.media_title} onChange={(event) => setMediaForm((current) => ({ ...current, media_title: event.target.value }))} /></div><div><Label>Original filename</Label><Input value={mediaForm.original_filename} onChange={(event) => setMediaForm((current) => ({ ...current, original_filename: event.target.value }))} /></div></div>
+            <div className="grid gap-3 md:grid-cols-2"><div><Label>Video title *</Label><Input value={mediaForm.media_title} onChange={(event) => setMediaForm((current) => ({ ...current, media_title: event.target.value }))} /></div><div><Label>Original filename</Label><Input value={mediaForm.original_filename} onChange={(event) => setMediaForm((current) => ({ ...current, original_filename: event.target.value }))} /></div></div>
             <div className="grid gap-3 md:grid-cols-3"><div><Label>Media type</Label><Select value={mediaForm.media_type} onValueChange={(value) => setMediaForm((current) => ({ ...current, media_type: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{['video', 'video_360', 'photo', 'preview_clip', 'document'].map((value) => <SelectItem key={value} value={value}>{formatLabel(value)}</SelectItem>)}</SelectContent></Select></div><div><Label>View type</Label><Select value={mediaForm.view_type} onValueChange={(value) => setMediaForm((current) => ({ ...current, view_type: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{['right_profile', 'left_profile', 'curb_line_edge_of_pavement', 'cross_section', '360_walk', 'custom'].map((value) => <SelectItem key={value} value={value}>{formatLabel(value)}</SelectItem>)}</SelectContent></Select></div><div><Label>Pairing status</Label><Select value={mediaForm.track_pairing_status} onValueChange={(value) => setMediaForm((current) => ({ ...current, track_pairing_status: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{['unpaired', 'candidate_match', 'paired', 'needs_review'].map((value) => <SelectItem key={value} value={value}>{formatLabel(value)}</SelectItem>)}</SelectContent></Select></div></div>
             <div><Label>Pairing notes</Label><Input value={mediaForm.pairing_notes} onChange={(event) => setMediaForm((current) => ({ ...current, pairing_notes: event.target.value }))} placeholder="Example: Same run as Main Street Right Profile, Garmin watch started 6 seconds early." /></div>
           </div>

@@ -14,6 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { formatLabel } from '@/lib/displayUtils';
+import { Badge } from '@/components/ui/badge';
 import { Camera, Plus, Search } from 'lucide-react';
 
 const emptySession = {
@@ -33,6 +34,8 @@ const emptySession = {
   gps_sync_status: 'not_started',
   timeline_index_status: 'not_started',
   qa_status: 'not_reviewed',
+  video_upload_status: 'not_uploaded',
+  session_handoff_status: 'not_started',
 };
 
 export default function CaptureSessions() {
@@ -52,9 +55,10 @@ export default function CaptureSessions() {
 
   const projectMap = Object.fromEntries(projects.map((project) => [project.id, project.project_name]));
   const entryMap = Object.fromEntries(entries.map((entry) => [entry.id, entry]));
-  const mediaCountBySession = mediaFiles.reduce((accumulator, file) => {
+  const mediaBySession = mediaFiles.reduce((accumulator, file) => {
     if (!file.capture_session_id) return accumulator;
-    accumulator[file.capture_session_id] = (accumulator[file.capture_session_id] || 0) + 1;
+    accumulator[file.capture_session_id] = accumulator[file.capture_session_id] || [];
+    accumulator[file.capture_session_id].push(file);
     return accumulator;
   }, {});
   const pairedTrackCountBySession = tracks.reduce((accumulator, track) => {
@@ -82,9 +86,13 @@ export default function CaptureSessions() {
     return matchesProject && haystack.includes(search.toLowerCase());
   }), [sessions, projectFilter, search, projectMap, entryMap]);
 
+  const sessionsWithVideo = sessions.filter((session) => (mediaBySession[session.id] || []).some((file) => ['video', 'video_360'].includes(file.media_type))).length;
+  const sessionsWithTracks = sessions.filter((session) => (pairedTrackCountBySession[session.id] || 0) > 0 || session.gps_sync_status === 'synced').length;
+  const indexedSessions = sessions.filter((session) => (indexedCountBySession[session.id] || 0) > 0 || session.timeline_index_status === 'indexed').length;
+
   return (
     <div className="space-y-6">
-      <PageHeader title="Capture Sessions" description="Manage the generated session stack, check field status, and track whether video, GPX/FIT pairing, and timeline indexing are complete.">
+      <PageHeader title="Capture Sessions" description="Track the generated session stack by order, recording status, video upload, GPX/FIT pairing, and timeline indexing." helpText="This page is now about generated sessions, not manual segment planning.">
         <Button size="sm" className="gap-2" onClick={() => setShowForm(true)}><Plus className="w-4 h-4" /> New Session</Button>
       </PageHeader>
 
@@ -92,9 +100,9 @@ export default function CaptureSessions() {
 
       <div className="grid gap-4 md:grid-cols-4">
         <Card><CardContent className="p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">Sessions</p><p className="mt-2 text-2xl font-semibold">{sessions.length}</p><p className="mt-2 text-sm text-muted-foreground">Generated and manual sessions in the active stack.</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">Ready or active</p><p className="mt-2 text-2xl font-semibold">{sessions.filter((session) => ['ready', 'in_progress', 'paused'].includes(session.session_status)).length}</p><p className="mt-2 text-sm text-muted-foreground">Sessions available for or currently in field use.</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">Video uploaded</p><p className="mt-2 text-2xl font-semibold">{sessions.filter((session) => (mediaCountBySession[session.id] || 0) > 0).length}</p><p className="mt-2 text-sm text-muted-foreground">Sessions that already have media attached.</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">Timeline indexed</p><p className="mt-2 text-2xl font-semibold">{sessions.filter((session) => (indexedCountBySession[session.id] || 0) > 0 || session.timeline_index_status === 'indexed').length}</p><p className="mt-2 text-sm text-muted-foreground">Sessions with searchable timeline output.</p></CardContent></Card>
+        <Card><CardContent className="p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">Video uploaded</p><p className="mt-2 text-2xl font-semibold">{sessionsWithVideo}</p><p className="mt-2 text-sm text-muted-foreground">Sessions with linked video ready for pairing or review.</p></CardContent></Card>
+        <Card><CardContent className="p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">GPX / FIT paired</p><p className="mt-2 text-2xl font-semibold">{sessionsWithTracks}</p><p className="mt-2 text-sm text-muted-foreground">Sessions with a paired track or synced GPS status.</p></CardContent></Card>
+        <Card><CardContent className="p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">Timeline indexed</p><p className="mt-2 text-2xl font-semibold">{indexedSessions}</p><p className="mt-2 text-sm text-muted-foreground">Sessions with searchable timeline output.</p></CardContent></Card>
       </div>
 
       <div className="flex flex-wrap gap-3">
@@ -104,28 +112,41 @@ export default function CaptureSessions() {
 
       {isLoading ? <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-muted border-t-primary rounded-full animate-spin" /></div> : filtered.length === 0 ? <EmptyState icon={Camera} title="No capture sessions yet" description="Generate sessions from the entry page or create a manual one if you need a special pass." /> : (
         <div className="grid gap-3">
-          {filtered.map((session) => (
-            <Card key={session.id}>
-              <CardHeader className="pb-3">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
-                    <CardTitle className="text-base">{session.recording_order || 0}. {session.session_name}</CardTitle>
-                    <p className="mt-1 text-sm text-muted-foreground">{projectMap[session.project_id] || 'No project'} · {formatLabel(session.default_view_type)} · {entryMap[session.capture_session_entry_id]?.entry_name || 'Manual session'}</p>
+          {filtered.map((session) => {
+            const media = mediaBySession[session.id] || [];
+            const videos = media.filter((file) => ['video', 'video_360'].includes(file.media_type));
+            const videoReady = videos.length > 0 || session.video_upload_status === 'uploaded' || session.video_upload_status === 'linked';
+            const trackReady = (pairedTrackCountBySession[session.id] || 0) > 0 || session.gps_sync_status === 'synced';
+            const timelineReady = (indexedCountBySession[session.id] || 0) > 0 || session.timeline_index_status === 'indexed';
+            return (
+              <Card key={session.id}>
+                <CardHeader className="pb-3">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <CardTitle className="text-base">{session.recording_order || 0}. {session.session_name}</CardTitle>
+                      <p className="mt-1 text-sm text-muted-foreground">{projectMap[session.project_id] || 'No project'} · {formatLabel(session.default_view_type)} · {entryMap[session.capture_session_entry_id]?.entry_name || 'Manual session'}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2 justify-end"><StatusBadge status={session.session_status} /><StatusBadge status={session.session_handoff_status || 'not_started'} /><StatusBadge status={session.qa_status} /></div>
                   </div>
-                  <div className="flex flex-wrap gap-2 justify-end"><StatusBadge status={session.session_status} /><StatusBadge status={session.qa_status} /></div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4 text-sm text-muted-foreground">
-                <div className="grid gap-3 md:grid-cols-4">
-                  <div className="rounded-lg border p-3"><p className="text-xs uppercase tracking-wide text-muted-foreground">Recording order</p><p className="mt-1 font-medium text-foreground">{session.recording_order || 0}</p></div>
-                  <div className="rounded-lg border p-3"><p className="text-xs uppercase tracking-wide text-muted-foreground">Video uploaded</p><p className="mt-1 font-medium text-foreground">{(mediaCountBySession[session.id] || 0) > 0 ? `${mediaCountBySession[session.id]} file(s)` : 'Not yet'}</p></div>
-                  <div className="rounded-lg border p-3"><p className="text-xs uppercase tracking-wide text-muted-foreground">GPX / FIT paired</p><p className="mt-1 font-medium text-foreground">{(pairedTrackCountBySession[session.id] || 0) > 0 || session.gps_sync_status === 'synced' ? 'Paired' : formatLabel(session.gps_sync_status || 'not_started')}</p></div>
-                  <div className="rounded-lg border p-3"><p className="text-xs uppercase tracking-wide text-muted-foreground">Timeline indexing</p><p className="mt-1 font-medium text-foreground">{(indexedCountBySession[session.id] || 0) > 0 ? `${indexedCountBySession[session.id]} entries` : formatLabel(session.timeline_index_status || 'not_started')}</p></div>
-                </div>
-                <p>{session.session_area_description || 'No session area description yet.'}</p>
-              </CardContent>
-            </Card>
-          ))}
+                </CardHeader>
+                <CardContent className="space-y-4 text-sm text-muted-foreground">
+                  <div className="grid gap-3 md:grid-cols-5">
+                    <div className="rounded-lg border p-3"><p className="text-xs uppercase tracking-wide text-muted-foreground">Session order</p><p className="mt-1 font-medium text-foreground">{session.recording_order || 0}</p></div>
+                    <div className="rounded-lg border p-3"><p className="text-xs uppercase tracking-wide text-muted-foreground">Recording status</p><p className="mt-1 font-medium text-foreground">{formatLabel(session.session_status || 'planned')}</p></div>
+                    <div className="rounded-lg border p-3"><p className="text-xs uppercase tracking-wide text-muted-foreground">Video uploaded</p><p className="mt-1 font-medium text-foreground">{videoReady ? `${videos.length || 1} linked` : 'Not yet'}</p></div>
+                    <div className="rounded-lg border p-3"><p className="text-xs uppercase tracking-wide text-muted-foreground">GPX / FIT paired</p><p className="mt-1 font-medium text-foreground">{trackReady ? 'Paired' : formatLabel(session.gps_sync_status || 'not_started')}</p></div>
+                    <div className="rounded-lg border p-3"><p className="text-xs uppercase tracking-wide text-muted-foreground">Timeline indexing</p><p className="mt-1 font-medium text-foreground">{timelineReady ? `${indexedCountBySession[session.id] || 1} row(s)` : formatLabel(session.timeline_index_status || 'not_started')}</p></div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="outline">{formatLabel(session.capture_method)}</Badge>
+                    <Badge variant="outline">{session.session_code || 'No session code'}</Badge>
+                    {session.gps_track_expected && <Badge variant="outline">GPS expected</Badge>}
+                  </div>
+                  <p>{session.session_area_description || 'No session area description yet.'}</p>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
 

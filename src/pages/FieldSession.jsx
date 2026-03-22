@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { DocumentationPageIntro } from '@/components/ui/OperatingGuidance';
 import { PAGE_GUIDANCE } from '@/lib/workflowGuidance';
 import { formatLabel, formatTimestamp } from '@/lib/displayUtils';
-import { Play, Pause, Square, Shield, Clock3, MapPinned, StickyNote } from 'lucide-react';
+import { Play, Pause, Square, Shield, Clock3, MapPinned, StickyNote, Upload } from 'lucide-react';
 
 export default function FieldSession() {
   const [activeSessionId, setActiveSessionId] = useState('');
@@ -59,6 +59,7 @@ export default function FieldSession() {
       event_note: extraData.event_note || '',
       event_time: nowIso,
       timestamp_offset_seconds: elapsedSeconds,
+      handoff_ready: extraData.handoff_ready || false,
     });
   };
 
@@ -79,7 +80,7 @@ export default function FieldSession() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Field Session" description="Run the live session with lightweight start/stop controls, track guidance, an active timer, and only the notes you actually need in the field." />
+      <PageHeader title="Field Session" description="Run the generated session with simple start/stop controls, a live timer, GPS/track guidance, optional notes, and a clean handoff to upload + pairing." />
       <DocumentationPageIntro guide={{ title: PAGE_GUIDANCE.field_session.title, sections: PAGE_GUIDANCE.field_session.sections }} />
 
       <Card>
@@ -95,7 +96,7 @@ export default function FieldSession() {
               </SelectContent>
             </Select>
           </div>
-          {activeSession && <div className="flex flex-wrap gap-2"><StatusBadge status={activeSession.session_status} /><StatusBadge status={activeSession.gps_sync_status || 'not_started'} /></div>}
+          {activeSession && <div className="flex flex-wrap gap-2"><StatusBadge status={activeSession.session_status} /><StatusBadge status={activeSession.gps_sync_status || 'not_started'} /><StatusBadge status={activeSession.session_handoff_status || 'not_started'} /></div>}
         </CardContent>
       </Card>
 
@@ -106,15 +107,15 @@ export default function FieldSession() {
               <CardHeader><CardTitle className="text-base">Session controls</CardTitle></CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-3 sm:grid-cols-3">
-                  <Button className="gap-2" onClick={() => logLifecycle('in_progress', 'session_start', 'Session started')}><Play className="h-4 w-4" /> Start</Button>
+                  <Button className="gap-2" onClick={() => logLifecycle('in_progress', 'session_start', 'Session started', { session_handoff_status: 'not_started' })}><Play className="h-4 w-4" /> Start</Button>
                   <Button variant="secondary" className="gap-2" onClick={() => logLifecycle('paused', 'session_pause', 'Session paused')}><Pause className="h-4 w-4" /> Pause</Button>
-                  <Button variant="outline" className="gap-2" onClick={() => logLifecycle('uploaded', 'session_end', 'Session completed and handed off', { gps_sync_status: 'pending', timeline_index_status: 'not_started' })}><Square className="h-4 w-4" /> Complete & handoff</Button>
+                  <Button variant="outline" className="gap-2" onClick={() => logLifecycle('uploaded', 'session_end', 'Session completed and handed off', { gps_sync_status: 'pending', timeline_index_status: 'not_started', session_handoff_status: 'ready_for_upload', handoff_ready: true })}><Square className="h-4 w-4" /> Complete & handoff</Button>
                 </div>
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                   <div className="rounded-lg border p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">Timer</p><p className="mt-2 text-2xl font-semibold">{formatTimestamp(elapsedSeconds, '00:00')}</p></div>
                   <div className="rounded-lg border p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">View</p><p className="mt-2 font-medium text-foreground">{formatLabel(activeSession.default_view_type)}</p></div>
-                  <div className="rounded-lg border p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">GPS / track</p><p className="mt-2 font-medium text-foreground">{activeSession.gps_track_expected ? 'Required' : 'Optional'}</p></div>
-                  <div className="rounded-lg border p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">Timeline handoff</p><p className="mt-2 font-medium text-foreground">{formatLabel(activeSession.timeline_index_status || 'not_started')}</p></div>
+                  <div className="rounded-lg border p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">GPS / track workflow</p><p className="mt-2 font-medium text-foreground">{activeSession.gps_track_expected ? 'Start camera and GPX/FIT together' : 'Optional track'}</p></div>
+                  <div className="rounded-lg border p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">Completion / handoff</p><p className="mt-2 font-medium text-foreground">{formatLabel(activeSession.session_handoff_status || 'not_started')}</p></div>
                 </div>
               </CardContent>
             </Card>
@@ -122,9 +123,9 @@ export default function FieldSession() {
             <Card>
               <CardHeader><CardTitle className="text-base">GPS / track workflow guidance</CardTitle></CardHeader>
               <CardContent className="space-y-3 text-sm text-muted-foreground">
-                <div className="rounded-lg border p-3"><p className="font-medium text-foreground">1. Start both recording sources together.</p><p>Press record on the camera and start the GPX/FIT source as close together as possible, then start this session timer.</p></div>
-                <div className="rounded-lg border p-3"><p className="font-medium text-foreground">2. Keep moving notes light.</p><p>Only log event notes for pauses, unusual conditions, or markers you will want during sync and timeline review later.</p></div>
-                <div className="rounded-lg border p-3"><p className="font-medium text-foreground">3. Handoff means media + track pairing next.</p><p>When the run ends, mark Complete & handoff so Media Library can take over for video upload, GPX/FIT upload, pairing, and indexing.</p></div>
+                <div className="rounded-lg border p-3"><p className="font-medium text-foreground">1. Start both sources together.</p><p>Example: press record on the profile camera, start the watch or phone track, then tap Start here right away.</p></div>
+                <div className="rounded-lg border p-3"><p className="font-medium text-foreground">2. Keep notes light.</p><p>Add notes only for pauses, traffic interruptions, missed coverage, or anything that will matter during GPX/FIT pairing and timeline review.</p></div>
+                <div className="rounded-lg border p-3"><p className="font-medium text-foreground">3. Handoff when the run ends.</p><p>Complete & handoff means the next stop is Media Library for video upload, GPX/FIT upload, pairing, sync review, and indexing.</p></div>
               </CardContent>
             </Card>
           </div>
@@ -148,6 +149,7 @@ export default function FieldSession() {
                 <div className="rounded-lg border p-3"><p className="font-medium text-foreground">{activeSession.session_name}</p><p className="mt-1">{activeSession.session_area_description || 'No area description yet.'}</p></div>
                 <div className="rounded-lg border p-3 flex items-center gap-2"><Clock3 className="h-4 w-4 text-primary" /><span>Started: {activeSession.actual_start_time ? new Date(activeSession.actual_start_time).toLocaleString() : 'Not started yet'}</span></div>
                 <div className="rounded-lg border p-3 flex items-center gap-2"><MapPinned className="h-4 w-4 text-primary" /><span>GPS sync status: {formatLabel(activeSession.gps_sync_status || 'not_started')}</span></div>
+                <div className="rounded-lg border p-3 flex items-center gap-2"><Upload className="h-4 w-4 text-primary" /><span>Handoff target: upload video and GPX/FIT to this session next.</span></div>
               </CardContent>
             </Card>
 
