@@ -1,9 +1,9 @@
 import React from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { CheckCircle2, ChevronDown, Eye, ListChecks, Route } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 
 function Section({ title, body, ordered = false }) {
   if (!body || (Array.isArray(body) && body.length === 0)) return null;
@@ -67,18 +67,7 @@ export function CollapsibleInstructionPanel({ title = 'Page instructions', secti
 }
 
 export function NextStepPanel({ step, detail }) {
-  if (!step) return null;
-  return (
-    <Card className="border-primary/20 shadow-sm">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2"><Route className="h-4 w-4 text-primary" /> Next Step</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm font-medium">{step}</p>
-        {detail && <p className="mt-2 text-sm leading-6 text-muted-foreground">{detail}</p>}
-      </CardContent>
-    </Card>
-  );
+  return null;
 }
 
 export function DocumentationPageIntro({ guide, instructionCards = [] }) {
@@ -86,72 +75,17 @@ export function DocumentationPageIntro({ guide, instructionCards = [] }) {
 }
 
 export function QAReviewChecklist({ title = 'QA / Review Checklist', items = [] }) {
-  if (!items.length) return null;
-  return (
-    <Card>
-      <CardHeader><CardTitle className="text-base flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-600" /> {title}</CardTitle></CardHeader>
-      <CardContent className="space-y-3">
-        {items.map((item, index) => (
-          <div key={index} className="rounded-lg border p-3">
-            <p className="text-sm font-medium">{item.title}</p>
-            <p className="text-sm text-muted-foreground leading-6">{item.description}</p>
-          </div>
-        ))}
-      </CardContent>
-    </Card>
-  );
+  return null;
 }
 
 export function VisibilityRulesPanel({ title = 'Client Visibility Rules', rules = [] }) {
-  if (!rules.length) return null;
-  return (
-    <Card>
-      <CardHeader><CardTitle className="text-base flex items-center gap-2"><Eye className="w-4 h-4 text-blue-600" /> {title}</CardTitle></CardHeader>
-      <CardContent className="space-y-3">
-        {rules.map((rule, index) => (
-          <div key={index} className="rounded-lg bg-muted/40 p-3">
-            <p className="text-sm font-medium">{rule.title}</p>
-            <p className="text-sm text-muted-foreground leading-6">{rule.description}</p>
-          </div>
-        ))}
-      </CardContent>
-    </Card>
-  );
+  return null;
 }
 
 export function WorkflowStepsPanel({ title = 'Workflow Steps', steps = [] }) {
-  if (!steps.length) return null;
-  return (
-    <Card>
-      <CardHeader><CardTitle className="text-base flex items-center gap-2"><Route className="w-4 h-4 text-amber-600" /> {title}</CardTitle></CardHeader>
-      <CardContent className="space-y-3">
-        {steps.map((step, index) => (
-          <div key={index} className="flex gap-3 rounded-lg border p-3">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">{index + 1}</div>
-            <div>
-              <p className="text-sm font-medium">{step.title}</p>
-              <p className="text-sm text-muted-foreground leading-6">{step.description}</p>
-            </div>
-          </div>
-        ))}
-      </CardContent>
-    </Card>
-  );
+  return null;
 }
 
 export function InstructionPanel({ instructions = [] }) {
-  if (!instructions.length) return null;
-  return (
-    <Card>
-      <CardHeader><CardTitle className="text-base flex items-center gap-2"><ListChecks className="w-4 h-4 text-primary" /> Page Instructions</CardTitle></CardHeader>
-      <CardContent className="space-y-3">
-        {instructions.map((instruction) => (
-          <div key={instruction.id || instruction.instruction_key} className="rounded-lg border p-3">
-            <p className="text-sm font-medium">{instruction.instruction_title}</p>
-            <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{instruction.instruction_body}</p>
-          </div>
-        ))}
-      </CardContent>
-    </Card>
-  );
+  return null;
 }

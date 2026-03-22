@@ -33,6 +33,29 @@ function asJsonArray(value) {
   }
 }
 
+function haversineDistanceMeters(start, end) {
+  const toRadians = (value) => (value * Math.PI) / 180;
+  const earthRadiusMeters = 6371000;
+  const dLat = toRadians((end?.lat || 0) - (start?.lat || 0));
+  const dLng = toRadians((end?.lng || 0) - (start?.lng || 0));
+  const lat1 = toRadians(start?.lat || 0);
+  const lat2 = toRadians(end?.lat || 0);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return earthRadiusMeters * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
+
+function normalizePoint(point = {}) {
+  const lat = Number(point.lat ?? point.map_latitude ?? point.latitude);
+  const lng = Number(point.lng ?? point.map_longitude ?? point.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return { lat, lng };
+}
+
+function parseIsoTime(value) {
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
 function isApprovedSession(session = {}) {
   return ['approved', 'published'].includes(session.session_status) || session.qa_status === 'approved';
 }
@@ -115,8 +138,48 @@ export function getRoutePathSummary(routePoints = [], checkpoints = []) {
   };
 }
 
+export function ensureRouteCheckpointDefaults(routePoints = [], checkpoints = []) {
+  const normalizedRoutePoints = toArray(routePoints).map(normalizePoint).filter(Boolean);
+  const ordered = orderCheckpoints(checkpoints);
+  const firstPoint = normalizedRoutePoints[0] || null;
+  const lastPoint = normalizedRoutePoints[normalizedRoutePoints.length - 1] || null;
+  const manualMiddleCheckpoints = ordered.filter((checkpoint) => checkpoint.checkpoint_type !== 'start' && checkpoint.checkpoint_type !== 'end');
+  const startCheckpoint = ordered.find((checkpoint) => checkpoint.checkpoint_type === 'start');
+  const endCheckpoint = [...ordered].reverse().find((checkpoint) => checkpoint.checkpoint_type === 'end');
+  const anchored = [];
+
+  if (firstPoint) {
+    anchored.push({
+      ...startCheckpoint,
+      checkpoint_type: 'start',
+      checkpoint_label: startCheckpoint?.checkpoint_label?.trim() || 'Start',
+      map_latitude: firstPoint.lat,
+      map_longitude: firstPoint.lng,
+      is_client_visible: startCheckpoint?.is_client_visible ?? true,
+      is_route_endpoint_default: true,
+    });
+  }
+
+  anchored.push(...manualMiddleCheckpoints.map((checkpoint) => ({ ...checkpoint, is_route_endpoint_default: false })));
+
+  if (lastPoint) {
+    anchored.push({
+      ...endCheckpoint,
+      checkpoint_type: 'end',
+      checkpoint_label: endCheckpoint?.checkpoint_label?.trim() || 'End',
+      map_latitude: lastPoint.lat,
+      map_longitude: lastPoint.lng,
+      is_client_visible: endCheckpoint?.is_client_visible ?? true,
+      is_route_endpoint_default: true,
+    });
+  }
+
+  return orderCheckpoints(anchored);
+}
+
 export function getRouteValidationWarnings({ projectId, segmentId, sessionId, routeName, routePoints = [], checkpoints = [] }) {
-  const routeSummary = getRoutePathSummary(routePoints, checkpoints);
+  const normalizedCheckpoints = ensureRouteCheckpointDefaults(routePoints, checkpoints);
+  const routeSummary = getRoutePathSummary(routePoints, normalizedCheckpoints);
   const warnings = [];
 
   if (!projectId) warnings.push('Choose a project before building or saving a route.');
@@ -124,10 +187,149 @@ export function getRouteValidationWarnings({ projectId, segmentId, sessionId, ro
   if (!sessionId) warnings.push('Choose a capture session so field timing and review tools can reuse this route.');
   if (!routeName?.trim()) warnings.push('Add a route name so reviewers can identify the operational path quickly.');
   if (routePoints.length < 2) warnings.push('Add at least two map points to create a usable route path.');
-  if (!routeSummary.hasRequiredAnchors) warnings.push('Add both a start checkpoint and an end checkpoint before saving.');
-  if (toArray(checkpoints).some((checkpoint) => !checkpoint.checkpoint_label?.trim())) warnings.push('Rename any blank checkpoint labels so field and QA users can interpret them.');
+  if (!routeSummary.hasRequiredAnchors) warnings.push('The first and last route points must be available so the system can assign Start and End checkpoints automatically.');
+  if (toArray(normalizedCheckpoints).some((checkpoint) => !checkpoint.checkpoint_label?.trim())) warnings.push('Rename any blank checkpoint labels so field and QA users can interpret them.');
 
   return warnings;
+}
+
+export function estimateRouteProgressFromGps({ routePoints = [], sample = null }) {
+  const normalizedRoute = toArray(routePoints).map(normalizePoint).filter(Boolean);
+  const normalizedSample = normalizePoint(sample);
+  if (normalizedRoute.length === 0 || !normalizedSample) {
+    return { nearestPointIndex: -1, progressPercent: 0, distanceMeters: null };
+  }
+
+  let bestIndex = 0;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  normalizedRoute.forEach((point, index) => {
+    const distance = haversineDistanceMeters(point, normalizedSample);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = index;
+    }
+  });
+
+  return {
+    nearestPointIndex: bestIndex,
+    progressPercent: normalizedRoute.length > 1 ? Math.round((bestIndex / (normalizedRoute.length - 1)) * 100) : 0,
+    distanceMeters: Math.round(bestDistance),
+  };
+}
+
+export function estimateCheckpointMatchesFromGps({ checkpoints = [], gpsSamples = [], routePoints = [] }) {
+  const orderedCheckpoints = orderCheckpoints(checkpoints).filter((checkpoint) => normalizePoint(checkpoint));
+  const normalizedSamples = toArray(gpsSamples)
+    .map((sample) => {
+      const point = normalizePoint(sample);
+      if (!point) return null;
+      return {
+        ...sample,
+        lat: point.lat,
+        lng: point.lng,
+        timestamp: sample.timestamp || sample.recorded_at || sample.sampled_at || null,
+      };
+    })
+    .filter(Boolean);
+
+  return orderedCheckpoints.map((checkpoint, index) => {
+    const checkpointPoint = normalizePoint(checkpoint);
+    let bestSample = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+
+    normalizedSamples.forEach((sample) => {
+      const distance = haversineDistanceMeters(checkpointPoint, sample);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestSample = sample;
+      }
+    });
+
+    const progress = estimateRouteProgressFromGps({ routePoints, sample: bestSample });
+    return {
+      checkpoint_id: checkpoint.id || `checkpoint-${index}`,
+      checkpoint_label: checkpoint.checkpoint_label || `Checkpoint ${index + 1}`,
+      checkpoint_type: checkpoint.checkpoint_type || 'custom',
+      estimated_timestamp: bestSample?.timestamp || null,
+      nearest_landmark: checkpoint.checkpoint_label || checkpoint.checkpoint_reference || null,
+      progress_percent: progress.progressPercent,
+      distance_from_checkpoint_meters: Number.isFinite(bestDistance) ? Math.round(bestDistance) : null,
+      confidence: bestSample && bestDistance <= 35 ? 'high' : bestSample && bestDistance <= 80 ? 'medium' : bestSample ? 'low' : 'none',
+      gps_sample: bestSample ? {
+        field_session_reference: bestSample.field_session_reference || bestSample.capture_session_id || '',
+        timestamp: bestSample.timestamp,
+        latitude: bestSample.lat,
+        longitude: bestSample.lng,
+        accuracy: bestSample.accuracy ?? null,
+        heading: bestSample.heading ?? null,
+        speed: bestSample.speed ?? null,
+      } : null,
+    };
+  });
+}
+
+export function estimateSuggestedCutPoints({ segments = [], checkpoints = [], gpsSamples = [], routePoints = [] }) {
+  const matches = estimateCheckpointMatchesFromGps({ checkpoints, gpsSamples, routePoints });
+  const orderedSegments = toArray(segments);
+
+  if (!orderedSegments.length) {
+    const first = matches[0] || null;
+    const last = matches[matches.length - 1] || null;
+    return [{
+      segment_id: null,
+      segment_label: 'Full session',
+      suggested_start_timestamp: first?.estimated_timestamp || null,
+      suggested_end_timestamp: last?.estimated_timestamp || null,
+      start_checkpoint_label: first?.checkpoint_label || 'Start',
+      end_checkpoint_label: last?.checkpoint_label || 'End',
+      confidence: first?.confidence === 'high' && last?.confidence === 'high' ? 'high' : first || last ? 'medium' : 'none',
+    }];
+  }
+
+  return orderedSegments.map((segment, index) => {
+    const startMatch = matches[index] || matches[0] || null;
+    const endMatch = matches[index + 1] || matches[matches.length - 1] || startMatch;
+    return {
+      segment_id: segment.id || `segment-${index}`,
+      segment_label: segment.segment_code || segment.street_name || `Segment ${index + 1}`,
+      suggested_start_timestamp: startMatch?.estimated_timestamp || null,
+      suggested_end_timestamp: endMatch?.estimated_timestamp || null,
+      start_checkpoint_label: startMatch?.checkpoint_label || 'Start',
+      end_checkpoint_label: endMatch?.checkpoint_label || 'End',
+      confidence: startMatch?.confidence === 'high' && endMatch?.confidence === 'high' ? 'high' : startMatch || endMatch ? 'medium' : 'none',
+    };
+  });
+}
+
+export function buildGpsSampleRecord({ fieldSessionReference, coords = {}, timestamp = new Date().toISOString() }) {
+  return {
+    field_session_reference: fieldSessionReference || '',
+    timestamp,
+    latitude: Number(coords.latitude ?? coords.lat ?? 0),
+    longitude: Number(coords.longitude ?? coords.lng ?? 0),
+    accuracy: coords.accuracy ?? null,
+    heading: coords.heading ?? null,
+    speed: coords.speed ?? null,
+  };
+}
+
+export function getGpsTrackingSessionSummary({ sessionId, gpsSamples = [], checkpoints = [], routePoints = [], segments = [] }) {
+  const normalizedSamples = toArray(gpsSamples).filter((sample) => Number.isFinite(Number(sample.latitude ?? sample.lat)) && Number.isFinite(Number(sample.longitude ?? sample.lng)));
+  const firstSampleTime = parseIsoTime(normalizedSamples[0]?.timestamp);
+  const lastSampleTime = parseIsoTime(normalizedSamples[normalizedSamples.length - 1]?.timestamp);
+  const checkpointMatches = estimateCheckpointMatchesFromGps({ checkpoints, gpsSamples: normalizedSamples, routePoints });
+  const suggestedCutPoints = estimateSuggestedCutPoints({ segments, checkpoints, gpsSamples: normalizedSamples, routePoints });
+  const lastProgress = estimateRouteProgressFromGps({ routePoints, sample: normalizedSamples[normalizedSamples.length - 1] });
+
+  return {
+    totalSamples: normalizedSamples.length,
+    firstSampleTimestamp: normalizedSamples[0]?.timestamp || null,
+    lastSampleTimestamp: normalizedSamples[normalizedSamples.length - 1]?.timestamp || null,
+    elapsedSeconds: firstSampleTime !== null && lastSampleTime !== null ? Math.max(0, Math.round((lastSampleTime - firstSampleTime) / 1000)) : 0,
+    checkpointMatches,
+    suggestedCutPoints,
+    lastKnownProgress: lastProgress,
+  };
 }
 
 export function getSegmentCoverageSummary({ segments = [], routes = [], sessions = [], media = [] }) {

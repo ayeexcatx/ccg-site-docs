@@ -14,17 +14,17 @@ import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { DocumentationPageIntro, QAReviewChecklist, VisibilityRulesPanel, WorkflowStepsPanel, InstructionPanel, NextStepPanel } from '@/components/ui/OperatingGuidance';
 import FutureReadyPanel from '@/components/ui/FutureReadyPanel';
-import { addRouteCheckpoint, reorderRouteCheckpoints, saveDrawnRoutePath } from '@/lib/base44Workflows';
-import { getRoutePathSummary, getRouteValidationWarnings, orderCheckpoints } from '@/lib/domainWorkflows';
+import { reorderRouteCheckpoints, saveDrawnRoutePath, syncRouteCheckpoints } from '@/lib/base44Workflows';
+import { ensureRouteCheckpointDefaults, getRoutePathSummary, getRouteValidationWarnings, orderCheckpoints } from '@/lib/domainWorkflows';
 import { buildRouteMediaSyncEnvelope } from '@/lib/futureArchitecture';
 import { usePageInstructions } from '@/hooks/usePageInstructions';
 import { CHECKPOINT_TYPE_LABELS } from '@/lib/constants';
 import { PAGE_GUIDANCE } from '@/lib/workflowGuidance';
-import { AlertTriangle, ArrowDown, ArrowUp, Eye, EyeOff, GripVertical, ListChecks, MapPin, Plus, Save, Search, Trash2, Undo2, WandSparkles } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowUp, CheckCircle2, Eye, EyeOff, GripVertical, ListChecks, MapPin, Plus, Save, Search, Trash2, Undo2, WandSparkles } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 
 const DEFAULT_CHECKPOINT = { checkpoint_type: 'intersection', checkpoint_label: '', is_client_visible: true };
-const EMPTY_ROUTE_STATE = { projectId: '', segmentId: '', sessionId: '', template: '', routeName: '', routePoints: [], checkpoints: [], warning: '', isDrawing: false, searchQuery: '', searchResults: [] };
+const EMPTY_ROUTE_STATE = { projectId: '', segmentId: '', sessionId: '', template: '', routeName: '', routePoints: [], checkpoints: [], warning: '', success: '', isDrawing: false, searchQuery: '', searchResults: [] };
 
 const ROUTE_TEMPLATES = {
   linear_walk: {
@@ -101,7 +101,7 @@ function RouteSetupPanel({ projects, projectSegments, segmentSessions, state, se
           <StepHint step="1" title="Choose project" description="Start with the client project so the route cannot drift into the wrong operational scope." active={!state.projectId} complete={!!state.projectId} />
           <div>
             <Label>Project</Label>
-            <Select value={state.projectId || 'none'} onValueChange={(value) => setState((current) => ({ ...current, projectId: value === 'none' ? '' : value, segmentId: '', sessionId: '', routeName: '', routePoints: [], checkpoints: [], warning: '', isDrawing: false }))}>
+            <Select value={state.projectId || 'none'} onValueChange={(value) => setState((current) => ({ ...current, projectId: value === 'none' ? '' : value, segmentId: '', sessionId: '', routeName: '', routePoints: [], checkpoints: [], warning: '', success: '', isDrawing: false }))}>
               <SelectTrigger><SelectValue placeholder="Select project" /></SelectTrigger>
               <SelectContent><SelectItem value="none">Select project</SelectItem>{projects.map((project) => <SelectItem key={project.id} value={project.id}>{project.project_name}</SelectItem>)}</SelectContent>
             </Select>
@@ -113,7 +113,7 @@ function RouteSetupPanel({ projects, projectSegments, segmentSessions, state, se
           <StepHint step="2" title="Choose segment" description="Select the exact street segment that the route should cover. This keeps checkpoints and downstream media aligned." active={!!state.projectId && !state.segmentId} complete={!!state.segmentId} disabled={!state.projectId} />
           <div>
             <Label>Segment</Label>
-            <Select value={state.segmentId || 'none'} onValueChange={(value) => setState((current) => ({ ...current, segmentId: value === 'none' ? '' : value, sessionId: '', routeName: '', routePoints: [], checkpoints: [], warning: '', isDrawing: false }))}>
+            <Select value={state.segmentId || 'none'} onValueChange={(value) => setState((current) => ({ ...current, segmentId: value === 'none' ? '' : value, sessionId: '', routeName: '', routePoints: [], checkpoints: [], warning: '', success: '', isDrawing: false }))}>
               <SelectTrigger><SelectValue placeholder="Select segment" /></SelectTrigger>
               <SelectContent><SelectItem value="none">Select segment</SelectItem>{projectSegments.map((segment) => <SelectItem key={segment.id} value={segment.id}>{segment.segment_code || segment.street_name}</SelectItem>)}</SelectContent>
             </Select>
@@ -125,7 +125,7 @@ function RouteSetupPanel({ projects, projectSegments, segmentSessions, state, se
           <StepHint step="3" title="Choose session" description="Attach the route to the actual field session that will use it so timer events and markers can reuse this route spine." active={!!state.segmentId && !state.sessionId} complete={!!state.sessionId} disabled={!state.segmentId} />
           <div>
             <Label>Capture Session</Label>
-            <Select value={state.sessionId || 'none'} onValueChange={(value) => setState((current) => ({ ...current, sessionId: value === 'none' ? '' : value, warning: '' }))}>
+            <Select value={state.sessionId || 'none'} onValueChange={(value) => setState((current) => ({ ...current, sessionId: value === 'none' ? '' : value, warning: '', success: '' }))}>
               <SelectTrigger><SelectValue placeholder="Select session" /></SelectTrigger>
               <SelectContent><SelectItem value="none">Select session</SelectItem>{segmentSessions.map((session) => <SelectItem key={session.id} value={session.id}>{session.session_name}</SelectItem>)}</SelectContent>
             </Select>
@@ -161,23 +161,15 @@ function RouteSetupPanel({ projects, projectSegments, segmentSessions, state, se
           </div>
         </div>
 
-        <div className="rounded-xl border bg-muted/20 p-4">
-          {routeSuggestion && <p className="mb-2 text-sm text-foreground"><span className="font-semibold">Suggested route pattern:</span> {routeSuggestion}</p>}
-          <p className="mb-2 text-sm font-semibold">Drawing workflow</p>
-          <ul className="space-y-2 text-sm leading-6 text-muted-foreground">
-            <li>Use <span className="font-medium text-foreground">Draw Route</span> before clicking the map to create route points.</li>
-            <li>Turn drawing off before placing checkpoints so map clicks do not create accidental geometry.</li>
-            <li>Save only after the warnings below are resolved or consciously accepted by QA.</li>
-          </ul>
-        </div>
+        {routeSuggestion && <p className="text-sm text-muted-foreground"><span className="font-semibold text-foreground">Suggested route pattern:</span> {routeSuggestion}</p>}
 
         <div className="flex gap-2">
           <Button className="flex-1" variant={state.isDrawing ? 'destructive' : 'default'} onClick={onToggleDrawing} disabled={!state.sessionId}>{state.isDrawing ? 'Stop Drawing' : 'Draw Route'}</Button>
           <Button variant="outline" onClick={onUndoLastPoint} disabled={!state.routePoints.length}><Undo2 className="w-4 h-4" /></Button>
-          <Button variant="outline" onClick={() => setState((current) => ({ ...current, routePoints: [], warning: '' }))} disabled={!state.routePoints.length}><Trash2 className="w-4 h-4" /></Button>
+          <Button variant="outline" onClick={() => setState((current) => ({ ...current, routePoints: [], warning: '', success: '' }))} disabled={!state.routePoints.length}><Trash2 className="w-4 h-4" /></Button>
         </div>
         <Button className="w-full gap-2" onClick={onSave} disabled={!state.sessionId || validationWarnings.length > 0}><Save className="w-4 h-4" /> Save Route</Button>
-        {validationWarnings.length > 0 && <p className="text-xs text-muted-foreground">Saving stays disabled until the route has a project, segment, session, name, usable path geometry, and named start/end checkpoints.</p>}
+        {validationWarnings.length > 0 && <p className="text-xs text-muted-foreground">Saving stays disabled until the route has a project, segment, session, name, usable geometry, and labeled checkpoints. Start and End are auto-derived from the first and last route points.</p>}
 
         {!!validationWarnings.length && (
           <div className="space-y-2">
@@ -186,6 +178,7 @@ function RouteSetupPanel({ projects, projectSegments, segmentSessions, state, se
             ))}
           </div>
         )}
+        {state.success && <Alert className="border-emerald-200 bg-emerald-50 text-emerald-900"><CheckCircle2 className="h-4 w-4" /><AlertDescription>{state.success}</AlertDescription></Alert>}
         {state.warning && <Alert><AlertTriangle className="h-4 w-4" /><AlertDescription>{state.warning}</AlertDescription></Alert>}
       </CardContent>
     </Card>
@@ -234,7 +227,7 @@ function CheckpointBuilder({ checkpoints, setCheckpoints, addingCheckpoint, setA
         <div className="rounded-xl border bg-muted/20 p-4">
           {routeSuggestion && <p className="mb-2 text-sm text-foreground"><span className="font-semibold">Suggested route pattern:</span> {routeSuggestion}</p>}
           <p className="mb-2 text-sm font-semibold">Checkpoint operator guidance</p>
-          <p className="text-sm leading-6 text-muted-foreground">Keep checkpoints in travel order, use clear operational labels, and mark only truly client-useful references as visible. Reorder when field traversal changes, rename inline when wording improves, and delete only if the checkpoint should no longer drive review or marker context.</p>
+          <p className="text-sm leading-6 text-muted-foreground">Start and End stay synced to the first and last route points automatically. Add or edit only the intermediate checkpoints that help field staff, uploads, and review workflows.</p>
         </div>
 
         {addingCheckpoint && (
@@ -257,7 +250,7 @@ function CheckpointBuilder({ checkpoints, setCheckpoints, addingCheckpoint, setA
               </div>
               <Switch checked={newCheckpoint.is_client_visible} onCheckedChange={(checked) => setNewCheckpoint((current) => ({ ...current, is_client_visible: checked }))} />
             </div>
-            <p className="text-xs text-muted-foreground">After completing this form, click the map where the checkpoint belongs. The checkpoint is placed in the current list order.</p>
+            <p className="text-xs text-muted-foreground">After completing this form, click the map where the intermediate checkpoint belongs. It will be inserted between the automatic Start and End anchors.</p>
           </div>
         )}
 
@@ -293,9 +286,9 @@ function CheckpointBuilder({ checkpoints, setCheckpoints, addingCheckpoint, setA
                             <div className="flex items-center justify-between gap-3">
                               <p className="text-xs text-muted-foreground">{checkpoint.is_client_visible ? 'Visible to downstream client-safe interpretation when published.' : 'Internal-only operational reference.'}</p>
                               <div className="flex gap-1">
-                                <Button size="icon" variant="ghost" onClick={() => moveCheckpoint(index, -1)}><ArrowUp className="w-4 h-4" /></Button>
-                                <Button size="icon" variant="ghost" onClick={() => moveCheckpoint(index, 1)}><ArrowDown className="w-4 h-4" /></Button>
-                                <Button size="icon" variant="ghost" onClick={() => checkpoint.id && !String(checkpoint.id).startsWith('template-') ? deleteCheckpointMut.mutate(checkpoint.id) : setCheckpoints((current) => current.filter((_, currentIndex) => currentIndex !== index))}><Trash2 className="w-4 h-4" /></Button>
+                                <Button size="icon" variant="ghost" disabled={checkpoint.checkpoint_type === 'start'} onClick={() => moveCheckpoint(index, -1)}><ArrowUp className="w-4 h-4" /></Button>
+                                <Button size="icon" variant="ghost" disabled={checkpoint.checkpoint_type === 'end'} onClick={() => moveCheckpoint(index, 1)}><ArrowDown className="w-4 h-4" /></Button>
+                                <Button size="icon" variant="ghost" disabled={checkpoint.is_route_endpoint_default} onClick={() => checkpoint.id && !String(checkpoint.id).startsWith('template-') ? deleteCheckpointMut.mutate(checkpoint.id) : setCheckpoints((current) => current.filter((_, currentIndex) => currentIndex !== index))}><Trash2 className="w-4 h-4" /></Button>
                               </div>
                             </div>
                           </div>
@@ -305,7 +298,7 @@ function CheckpointBuilder({ checkpoints, setCheckpoints, addingCheckpoint, setA
                   </Draggable>
                 ))}
                 {provided.placeholder}
-                {checkpoints.length === 0 && <p className="py-6 text-center text-sm text-muted-foreground">No checkpoints added yet. Add start/end anchors and any operational reference locations the field and QA teams need.</p>}
+                {checkpoints.length === 0 && <p className="py-6 text-center text-sm text-muted-foreground">Draw the route first. Start and End will appear automatically, then add any intermediate checkpoints you need.</p>}
               </div>
             )}
           </Droppable>
@@ -334,7 +327,8 @@ export default function RouteEditor() {
   const selectedProject = useMemo(() => projects.find((project) => project.id === routeState.projectId), [projects, routeState.projectId]);
   const selectedSegment = useMemo(() => segments.find((segment) => segment.id === routeState.segmentId), [segments, routeState.segmentId]);
   const selectedSession = useMemo(() => sessions.find((session) => session.id === routeState.sessionId), [sessions, routeState.sessionId]);
-  const routeSummary = useMemo(() => getRoutePathSummary(routeState.routePoints, routeState.checkpoints), [routeState.routePoints, routeState.checkpoints]);
+  const normalizedCheckpoints = useMemo(() => ensureRouteCheckpointDefaults(routeState.routePoints, routeState.checkpoints), [routeState.routePoints, routeState.checkpoints]);
+  const routeSummary = useMemo(() => getRoutePathSummary(routeState.routePoints, normalizedCheckpoints), [routeState.routePoints, normalizedCheckpoints]);
   const syncEnvelope = useMemo(() => buildRouteMediaSyncEnvelope({ route: routes[0], checkpoints: routeState.checkpoints, session: selectedSession }), [routes, routeState.checkpoints, selectedSession]);
   const routeSuggestion = useMemo(() => {
     const viewType = selectedSession?.view_type;
@@ -351,8 +345,8 @@ export default function RouteEditor() {
     sessionId: routeState.sessionId,
     routeName: routeState.routeName,
     routePoints: routeState.routePoints,
-    checkpoints: routeState.checkpoints,
-  }), [routeState.projectId, routeState.segmentId, routeState.sessionId, routeState.routeName, routeState.routePoints, routeState.checkpoints]);
+    checkpoints: normalizedCheckpoints,
+  }), [routeState.projectId, routeState.segmentId, routeState.sessionId, routeState.routeName, routeState.routePoints, normalizedCheckpoints]);
 
   useEffect(() => {
     if (!selectedSession) return;
@@ -364,11 +358,19 @@ export default function RouteEditor() {
   }, [selectedSession]);
 
   useEffect(() => {
+    setRouteState((current) => {
+      const nextCheckpoints = ensureRouteCheckpointDefaults(current.routePoints, current.checkpoints);
+      const unchanged = JSON.stringify(nextCheckpoints) === JSON.stringify(current.checkpoints);
+      return unchanged ? current : { ...current, checkpoints: nextCheckpoints };
+    });
+  }, [routeState.routePoints]);
+
+  useEffect(() => {
     const route = routes[0];
     setRouteState((current) => {
       const sortedCheckpoints = orderCheckpoints(existingCheckpoints);
       if (!route) {
-        return { ...current, routeName: current.sessionId ? current.routeName : '', routePoints: current.sessionId ? current.routePoints : [], checkpoints: sortedCheckpoints };
+        return { ...current, routeName: current.sessionId ? current.routeName : '', routePoints: current.sessionId ? current.routePoints : [], checkpoints: sortedCheckpoints, success: '', warning: '' };
       }
 
       try {
@@ -377,38 +379,43 @@ export default function RouteEditor() {
           routeName: route.route_name || '',
           routePoints: JSON.parse(route.polyline_json || '[]'),
           checkpoints: sortedCheckpoints,
+          success: '',
+          warning: '',
         };
       } catch {
-        return { ...current, routeName: route.route_name || '', routePoints: [], checkpoints: sortedCheckpoints };
+        return { ...current, routeName: route.route_name || '', routePoints: [], checkpoints: sortedCheckpoints, success: '', warning: 'Saved route geometry could not be parsed. Redraw and save again.' };
       }
     });
   }, [routes, existingCheckpoints]);
 
-  const checkpointMut = useMutation({
-    mutationFn: ({ checkpoint, sequenceOrder }) => addRouteCheckpoint({ session: selectedSession, routePathId: routes[0]?.id, checkpoint, sequenceOrder }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['route-checkpoints', routeState.sessionId] }),
-  });
-
   const saveRouteMut = useMutation({
     mutationFn: async () => {
-      const startCount = routeState.checkpoints.filter((checkpoint) => checkpoint.checkpoint_type === 'start').length;
-      const endCount = routeState.checkpoints.filter((checkpoint) => checkpoint.checkpoint_type === 'end').length;
+      const checkpointsToSave = ensureRouteCheckpointDefaults(routeState.routePoints, routeState.checkpoints);
       if (routeState.routePoints.length < 2) throw new Error('Routes require at least two points.');
-      if (startCount === 0 || endCount === 0) throw new Error('Routes require both a start and end checkpoint before saving.');
-      return saveDrawnRoutePath({
+      if (checkpointsToSave.some((checkpoint) => !checkpoint.checkpoint_label?.trim())) throw new Error('Rename every checkpoint before saving so field staff can trust the route order.');
+      const savedRoute = await saveDrawnRoutePath({
         existingRouteId: routes[0]?.id,
         session: selectedSession,
         routeName: routeState.routeName,
         routePoints: routeState.routePoints,
-        checkpoints: routeState.checkpoints,
+        checkpoints: checkpointsToSave,
         templateName: ROUTE_TEMPLATES[routeState.template]?.name,
       });
+      await syncRouteCheckpoints({
+        session: selectedSession,
+        routePathId: savedRoute.id,
+        routePoints: routeState.routePoints,
+        checkpoints: checkpointsToSave,
+        existingCheckpoints,
+      });
+      return savedRoute;
     },
     onSuccess: () => {
-      setRouteState((current) => ({ ...current, warning: '' }));
+      setRouteState((current) => ({ ...current, warning: '', success: 'Route, session link, and checkpoint data saved successfully.' }));
       queryClient.invalidateQueries({ queryKey: ['routes', routeState.sessionId] });
+      queryClient.invalidateQueries({ queryKey: ['route-checkpoints', routeState.sessionId] });
     },
-    onError: (error) => setRouteState((current) => ({ ...current, warning: error.message || 'Unable to save route.' })),
+    onError: (error) => setRouteState((current) => ({ ...current, success: '', warning: error.message || 'Unable to save route.' })),
   });
 
   const deleteCheckpointMut = useMutation({
@@ -431,18 +438,23 @@ export default function RouteEditor() {
 
   const handleMapClick = useCallback((latlng) => {
     if (routeState.isDrawing) {
-      setRouteState((current) => ({ ...current, routePoints: [...current.routePoints, { lat: latlng.lat, lng: latlng.lng }] }));
+      setRouteState((current) => ({ ...current, success: '', warning: '', routePoints: [...current.routePoints, { lat: latlng.lat, lng: latlng.lng }] }));
     }
 
     if (addingCheckpoint && newCheckpoint.checkpoint_label && selectedSession) {
-      checkpointMut.mutate({
-        checkpoint: { ...newCheckpoint, map_latitude: latlng.lat, map_longitude: latlng.lng },
-        sequenceOrder: routeState.checkpoints.length,
-      });
+      setRouteState((current) => ({
+        ...current,
+        success: '',
+        warning: '',
+        checkpoints: orderCheckpoints([
+          ...current.checkpoints,
+          { ...newCheckpoint, map_latitude: latlng.lat, map_longitude: latlng.lng, is_route_endpoint_default: false },
+        ]),
+      }));
       setAddingCheckpoint(false);
       setNewCheckpoint(DEFAULT_CHECKPOINT);
     }
-  }, [addingCheckpoint, checkpointMut, newCheckpoint, routeState.checkpoints.length, routeState.isDrawing, selectedSession]);
+  }, [addingCheckpoint, newCheckpoint, routeState.isDrawing, selectedSession]);
 
   const applyTemplate = () => {
     const template = ROUTE_TEMPLATES[routeState.template];
@@ -452,7 +464,8 @@ export default function RouteEditor() {
       routeName: template.name,
       routePoints: template.routePoints,
       checkpoints: buildTemplateCheckpoints(template),
-      warning: 'Template loaded locally. Save the route to persist the path, then confirm each checkpoint label and visibility state.',
+      success: '',
+      warning: 'Template loaded locally. Save to persist it, then verify the suggested start/end defaults and any intermediate checkpoints.',
     }));
   };
 
@@ -462,7 +475,7 @@ export default function RouteEditor() {
     const response = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&q=${encodeURIComponent(routeState.searchQuery)}`);
     const results = await response.json();
     const first = results?.[0];
-    setRouteState((current) => ({ ...current, searchResults: results, warning: first ? '' : 'No matching location found.' }));
+    setRouteState((current) => ({ ...current, searchResults: results, success: '', warning: first ? '' : 'No matching location found. Try a fuller street address, city, or landmark name.' }));
     if (first) setFocusedSearchPoint({ lat: Number(first.lat), lng: Number(first.lon) });
   };
 
@@ -472,7 +485,7 @@ export default function RouteEditor() {
     if (swapIndex < 0 || swapIndex >= next.length) return;
     [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
     const resequenced = orderCheckpoints(next);
-    setRouteState((current) => ({ ...current, checkpoints: resequenced }));
+    setRouteState((current) => ({ ...current, success: '', checkpoints: resequenced }));
     await resequencePersistedCheckpoints(resequenced);
   };
 
@@ -482,7 +495,7 @@ export default function RouteEditor() {
     const [moved] = next.splice(source.index, 1);
     next.splice(destination.index, 0, moved);
     const resequenced = orderCheckpoints(next);
-    setRouteState((current) => ({ ...current, checkpoints: resequenced }));
+    setRouteState((current) => ({ ...current, success: '', checkpoints: resequenced }));
     await resequencePersistedCheckpoints(resequenced);
   };
 
@@ -514,11 +527,6 @@ export default function RouteEditor() {
           <Card className="overflow-hidden">
             <CardHeader className="pb-3"><CardTitle className="text-base">Interactive Route Map</CardTitle></CardHeader>
             <CardContent className="space-y-4 p-4">
-              <div className="rounded-xl border bg-muted/20 p-4">
-          {routeSuggestion && <p className="mb-2 text-sm text-foreground"><span className="font-semibold">Suggested route pattern:</span> {routeSuggestion}</p>}
-                <p className="mb-2 text-sm font-semibold">Map operating instructions</p>
-                <p className="text-sm leading-6 text-muted-foreground">When drawing is active, every map click creates another route point. When checkpoint creation is open, clicking the map places the checkpoint at the selected location. Keep those two modes intentional so the route line and checkpoint stack stay clean.</p>
-              </div>
               <div className="h-[560px] overflow-hidden rounded-xl border">
                 <MapContainer center={[34.0522, -118.2437]} zoom={14} minZoom={3} maxZoom={21} className="h-full w-full" scrollWheelZoom>
                   <MapViewportController focusPoint={focusedSearchPoint} />
@@ -526,13 +534,13 @@ export default function RouteEditor() {
                   <MapClickHandler onMapClick={handleMapClick} />
                   {routeState.routePoints.length > 1 && <Polyline positions={routeState.routePoints} color="#2563eb" weight={4} />}
                   {routeState.routePoints.map((point, index) => (
-                    <Marker key={`route-point-${index}`} position={[point.lat, point.lng]} draggable eventHandlers={{ dragend: (event) => { const nextLatLng = event.target.getLatLng(); setRouteState((current) => ({ ...current, routePoints: current.routePoints.map((item, itemIndex) => itemIndex === index ? { lat: nextLatLng.lat, lng: nextLatLng.lng } : item) })); } }}>
-                      <Popup>Route point {index + 1}</Popup>
+                    <Marker key={`route-point-${index}`} position={[point.lat, point.lng]} draggable eventHandlers={{ dragend: (event) => { const nextLatLng = event.target.getLatLng(); setRouteState((current) => ({ ...current, success: '', routePoints: current.routePoints.map((item, itemIndex) => itemIndex === index ? { lat: nextLatLng.lat, lng: nextLatLng.lng } : item) })); } }}>
+                      <Popup>Route point {index + 1}{index === 0 ? ' · Start anchor' : index === routeState.routePoints.length - 1 ? ' · End anchor' : ''}</Popup>
                     </Marker>
                   ))}
                   {routeState.checkpoints.filter((checkpoint) => checkpoint.map_latitude && checkpoint.map_longitude).map((checkpoint, index) => (
-                    <Marker key={checkpoint.id || `checkpoint-${index}`} position={[checkpoint.map_latitude, checkpoint.map_longitude]} draggable eventHandlers={{ dragend: (event) => { const nextLatLng = event.target.getLatLng(); setRouteState((current) => ({ ...current, checkpoints: current.checkpoints.map((item, itemIndex) => itemIndex === index ? { ...item, map_latitude: nextLatLng.lat, map_longitude: nextLatLng.lng } : item) })); if (checkpoint.id && !String(checkpoint.id).startsWith('template-')) updateCheckpointMut.mutate({ checkpointId: checkpoint.id, data: { map_latitude: nextLatLng.lat, map_longitude: nextLatLng.lng } }); } }}>
-                      <Popup>{checkpoint.checkpoint_label}</Popup>
+                    <Marker key={checkpoint.id || `checkpoint-${index}`} position={[checkpoint.map_latitude, checkpoint.map_longitude]} draggable={!checkpoint.is_route_endpoint_default} eventHandlers={{ dragend: (event) => { const nextLatLng = event.target.getLatLng(); setRouteState((current) => ({ ...current, success: '', checkpoints: current.checkpoints.map((item, itemIndex) => itemIndex === index ? { ...item, map_latitude: nextLatLng.lat, map_longitude: nextLatLng.lng } : item) })); if (checkpoint.id && !String(checkpoint.id).startsWith('template-')) updateCheckpointMut.mutate({ checkpointId: checkpoint.id, data: { map_latitude: nextLatLng.lat, map_longitude: nextLatLng.lng } }); } }}>
+                      <Popup>#{index + 1} · {checkpoint.checkpoint_label}</Popup>
                     </Marker>
                   ))}
                 </MapContainer>
