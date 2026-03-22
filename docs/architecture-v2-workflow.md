@@ -1,85 +1,40 @@
-# CCG Site Documentation Portal v2 Architecture
+# CCG V2 Architecture Notes
 
-## Goal
-Shift the product from a segment / route / checkpoint-first model into a simpler workflow centered on projects, capture sessions, session entries, GPS-track pairing, searchable timeline indexing, and a cleaner client portal.
+This document summarizes the same rebuilt direction described in `docs/ccg-v2-workflow.md`, but in shorter reference form.
 
-## Core workflow
-1. **Client**
-   - Owns the relationship and portal access context.
-2. **Project**
-   - Top-level container for scope, release controls, and all downstream work.
-3. **Capture Sessions**
-   - Represent the real field recording runs for a project.
-4. **Capture Session Entries**
-   - Hold notes, observations, issues, and GPS-pairing moments tied to each session.
-5. **Field Session**
-   - Used during capture to run the live session and log timing-aware events.
-6. **Media Library + GPS pairing**
-   - Uploaded media is attached to the correct project/session and paired with GPX or FIT tracks.
-7. **Timeline Review**
-   - Session entries, media, and GPS tracks are indexed into searchable timeline items for internal QA.
-8. **Client Portal**
-   - Clients review the published summary, released media, and published searchable timeline package.
+## Current center of the app
 
-## Page model
-### Kept and adapted
-- Dashboard
-- Clients
-- Users
-- Projects
-- Project Detail
-- Capture Sessions
-- Field Session
-- Media Library
-- Review Cases
-- Client Portal Home
-- Client Project Viewer
-- System Instructions
+The app is now centered on:
 
-### Added / rebuilt
-- Capture Session Entries
-- Timeline Review
-- GPS / track pairing flow embedded in Media Library
+- `CaptureSessionEntry` as the planning definition
+- `CaptureSession` as the real recording task
+- `MediaFile` + `GpsTrack` pairing after upload
+- `SessionSync` as the timing alignment layer
+- `TimelineIndexEntry` as the searchable output used in internal review and client search
 
-### Removed or demoted
-- Street Segments page removed as a primary workflow surface
-- Route Editor page removed as a primary workflow surface
-- Marker Review demoted into Timeline Review responsibilities
-- Asset Locations no longer part of the main app workflow
+## Main workflow spine
 
-## Data model changes
-### Added entities
-- `CaptureSessionEntry`
-- `GpsTrack`
-- `TimelineIndexItem`
+1. project setup
+2. capture session entry setup
+3. generated capture sessions
+4. field recording
+5. video + GPX/FIT upload
+6. media/track pairing
+7. timeline indexing
+8. human review
+9. client portal release
 
-### Removed entities
-- `StreetSegment`
-- `RoutePath`
-- `RouteCheckpoint`
-- `RouteTemplate`
-- `AssetLocation`
-- `MediaMarker`
+## Old concepts that are no longer primary
 
-### Edited entities
-- `CaptureSession`
-- `MediaFile`
-- `FieldSessionEvent`
-- `ReviewCase`
+The rebuilt app no longer treats these as the main workflow backbone:
 
-## Guidance model
-Every major page now uses a single collapsible instruction panel with exactly these sections:
-1. What this page is for
-2. What you do here
-3. What each major part of the page does
-4. Example
-5. What happens after this
-6. Tips / mistakes to avoid
+- segment-first planning
+- route drawing as the required starting point
+- heavy checkpoint logging during recording
+- browse-only delivery without searchable timeline support
 
-## Intended result
-The repo now supports a cleaner operating model:
-- less setup-heavy planning
-- less dependence on map drawing and checkpoints
-- better alignment to real field capture behavior
-- stronger support for video + GPX/FIT pairing
-- a clearer searchable timeline for both internal review and client delivery
+## Practical reminder
+
+When updating docs or workflow guidance in this repo, describe the app as **session-first and GPS-track-based**.
+
+If exact entity fields matter, use `EntityCopies/` as the source of truth.
