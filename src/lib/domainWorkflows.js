@@ -30,6 +30,19 @@ export function getVisibilityLabelForRecord(record = {}, clientField = 'client_v
   return 'needs_review';
 }
 
+export function getVisibilityWarnings(record = {}, { clientField = 'client_visible_notes', internalField = 'internal_notes', visibleFlag = 'is_client_visible' } = {}) {
+  const warnings = [];
+  const clientText = record?.[clientField]?.trim?.() || '';
+  const internalText = record?.[internalField]?.trim?.() || '';
+  const isVisible = !!record?.[visibleFlag];
+
+  if (isVisible && !clientText) warnings.push('Client-visible content should include a client-facing note before publication or portal review.');
+  if (clientText && INTERNAL_DRAFT_PATTERN.test(clientText)) warnings.push('Client-visible notes contain draft or internal wording that should be cleaned before publication.');
+  if (isVisible && internalText && clientText && internalText.trim() === clientText.trim()) warnings.push('Client-visible notes currently mirror internal notes. Rewrite the client text so internal-only language is not exposed.');
+
+  return warnings;
+}
+
 export function getMarkerConfidenceLabel(confidenceLevel) {
   // A readable label makes review screens easier to scan and gives future workflow code
   // a single place to define marker confidence vocabulary.
@@ -156,6 +169,14 @@ export function getProjectReadinessSummary({ project, segments = [], sessions = 
   };
 }
 
+export function getProjectPublishWarnings({ project, segments = [], sessions = [], media = [], markers = [], routes = [] }) {
+  const readiness = getProjectReadinessSummary({ project, segments, sessions, media, markers, routes });
+  return [
+    ...readiness.blockers,
+    ...getVisibilityWarnings(project, { visibleFlag: 'published_to_client' }),
+  ];
+}
+
 export function getProjectDetailSummary({ project, segments = [], sessions = [], media = [], markers = [], routes = [] }) {
   const readiness = getProjectReadinessSummary({ project, segments, sessions, media, markers, routes });
   const mediaCounts = toArray(media).reduce((accumulator, item) => {
@@ -229,6 +250,24 @@ export function getFieldSessionViewModel({ checkpoints = [], storedEvents = [], 
     groupedEvents,
     eventCards,
   };
+}
+
+export function getMarkerValidationWarnings(marker = {}, { mediaFiles = [], checkpoints = [], assetLocations = [] } = {}) {
+  const warnings = [];
+  const selectedMedia = toArray(mediaFiles).find((item) => item.id === marker.media_file_id);
+  const hasCheckpointAssociation = !!marker.route_checkpoint_id || !!marker.checkpoint_reference?.trim?.();
+  const hasAssetAssociation = !!marker.asset_location_id || !!marker.asset_location_reference?.trim?.();
+
+  if (!marker.project_id) warnings.push('Choose the project so the marker appears in the correct operational scope.');
+  if (!marker.media_file_id) warnings.push('Choose the source media file before saving the marker.');
+  if (selectedMedia && marker.project_id && selectedMedia.project_id && selectedMedia.project_id !== marker.project_id) warnings.push('Selected media belongs to a different project than the marker.');
+  if (marker.timestamp_seconds === '' || marker.timestamp_seconds === null || Number.isNaN(Number(marker.timestamp_seconds)) || Number(marker.timestamp_seconds) < 0) warnings.push('Enter a valid non-negative timestamp for the marker.');
+  if (!marker.marker_label?.trim()) warnings.push('Add a marker label that explains what the reviewer or client should notice.');
+  if (!hasCheckpointAssociation && !hasAssetAssociation) warnings.push('Link the marker to a checkpoint or asset reference so reviewers can trace the association.');
+  if (marker.route_checkpoint_id && !toArray(checkpoints).some((checkpoint) => checkpoint.id === marker.route_checkpoint_id)) warnings.push('Selected checkpoint association no longer exists in the current dataset.');
+  if (marker.asset_location_id && !toArray(assetLocations).some((asset) => asset.id === marker.asset_location_id)) warnings.push('Selected asset association no longer exists in the current dataset.');
+
+  return [...warnings, ...getVisibilityWarnings(marker)];
 }
 
 export function getMarkerReviewSummary(params = {}) {

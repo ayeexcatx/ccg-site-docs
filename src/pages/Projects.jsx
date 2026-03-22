@@ -81,6 +81,17 @@ export default function Projects() {
         }}
       />
 
+
+      <div className="rounded-xl border bg-muted/30 p-4 mb-4">
+        <p className="text-sm font-semibold">Intended workflow sequence</p>
+        <ol className="mt-2 list-decimal pl-5 text-sm leading-6 text-muted-foreground space-y-1">
+          <li>Create the client organization first so the project has the correct ownership and portal audience.</li>
+          <li>Create the project and define required capture views before any route or field work begins.</li>
+          <li>Add street segments, then create capture sessions and route paths for each segment.</li>
+          <li>Run field sessions, upload media, review markers, and publish only after the project detail readiness checks are clean.</li>
+        </ol>
+      </div>
+
       <div className="flex items-center gap-3 mb-4 flex-wrap">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />

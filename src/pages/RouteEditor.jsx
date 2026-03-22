@@ -155,7 +155,8 @@ function RouteSetupPanel({ projects, projectSegments, segmentSessions, state, se
           <Button className="flex-1" variant={state.isDrawing ? 'destructive' : 'default'} onClick={onToggleDrawing} disabled={!state.sessionId}>{state.isDrawing ? 'Stop Drawing' : 'Draw Route'}</Button>
           <Button variant="outline" onClick={() => setState((current) => ({ ...current, routePoints: [], warning: '' }))} disabled={!state.routePoints.length}><Trash2 className="w-4 h-4" /></Button>
         </div>
-        <Button className="w-full gap-2" onClick={onSave} disabled={!state.sessionId}><Save className="w-4 h-4" /> Save Route</Button>
+        <Button className="w-full gap-2" onClick={onSave} disabled={!state.sessionId || validationWarnings.length > 0}><Save className="w-4 h-4" /> Save Route</Button>
+        {validationWarnings.length > 0 && <p className="text-xs text-muted-foreground">Saving stays disabled until the route has a project, segment, session, name, usable path geometry, and named start/end checkpoints.</p>}
 
         {!!validationWarnings.length && (
           <div className="space-y-2">
