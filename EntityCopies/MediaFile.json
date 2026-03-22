@@ -178,6 +178,25 @@
     },
     "client_visible_notes": {
       "type": "string"
+    },
+    "sync_preview_status": {
+      "type": "string",
+      "enum": [
+        "not_started",
+        "ready",
+        "needs_review",
+        "rejected"
+      ],
+      "default": "not_started"
+    },
+    "suggested_cut_status": {
+      "type": "string",
+      "enum": [
+        "not_started",
+        "generated",
+        "reviewed"
+      ],
+      "default": "not_started"
     }
   },
   "required": [

@@ -52,6 +52,10 @@
     },
     "map_longitude": {
       "type": "number"
+    },
+    "handoff_ready": {
+      "type": "boolean",
+      "default": false
     }
   },
   "required": [

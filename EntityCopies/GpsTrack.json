@@ -74,6 +74,18 @@
     },
     "updated_date": {
       "type": "string"
+    },
+    "track_name": {
+      "type": "string"
+    },
+    "pairing_status": {
+      "type": "string",
+      "enum": [
+        "unpaired",
+        "paired",
+        "needs_review"
+      ],
+      "default": "unpaired"
     }
   },
   "required": [
