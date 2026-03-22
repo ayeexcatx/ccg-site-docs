@@ -1,123 +1,74 @@
-import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import React, { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import PageHeader from '@/components/ui/PageHeader';
-import { DocumentationPageIntro } from '@/components/ui/OperatingGuidance';
 import EmptyState from '@/components/ui/EmptyState';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { DocumentationPageIntro } from '@/components/ui/OperatingGuidance';
+import { PAGE_GUIDANCE } from '@/lib/workflowGuidance';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Users, Search, Pencil } from 'lucide-react';
+import { Plus, Search, Users } from 'lucide-react';
 
 const ROLES = ['super_admin', 'company_admin', 'documenter', 'client_manager', 'client_viewer'];
-const emptyUser = { full_name: '', email: '', role: 'client_viewer', client_organization_id: '', job_title: '', phone: '', is_active: true, internal_notes: '' };
+const emptyUser = { full_name: '', email: '', role: 'client_viewer', client_organization_id: '', job_title: '', phone: '', is_active: true };
 
 export default function UsersPage() {
-  const [showForm, setShowForm] = useState(false);
-  const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState(emptyUser);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState(emptyUser);
   const queryClient = useQueryClient();
 
-  const { data: users = [], isLoading } = useQuery({
-    queryKey: ['user-profiles'],
-    queryFn: () => base44.entities.UserProfile.list('-created_date', 200),
-  });
+  const { data: users = [], isLoading } = useQuery({ queryKey: ['user-profiles'], queryFn: () => base44.entities.UserProfile.list('-created_date', 200) });
+  const { data: clients = [] } = useQuery({ queryKey: ['clients'], queryFn: () => base44.entities.ClientOrganization.list('-created_date', 100) });
+  const createMut = useMutation({ mutationFn: (data) => base44.entities.UserProfile.create(data), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['user-profiles'] }); setShowForm(false); setForm(emptyUser); } });
 
-  const { data: clients = [] } = useQuery({
-    queryKey: ['clients'],
-    queryFn: () => base44.entities.ClientOrganization.list('-created_date', 100),
-  });
-
-  const createMut = useMutation({
-    mutationFn: (d) => base44.entities.UserProfile.create(d),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['user-profiles'] }); closeForm(); },
-  });
-
-  const updateMut = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.UserProfile.update(id, data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['user-profiles'] }); closeForm(); },
-  });
-
-  const closeForm = () => { setShowForm(false); setEditing(null); setForm(emptyUser); };
-  const openEdit = (u) => { setEditing(u); setForm(u); setShowForm(true); };
-  const handleSave = () => { editing ? updateMut.mutate({ id: editing.id, data: form }) : createMut.mutate(form); };
-
-  const filtered = users.filter(u => {
-    const matchSearch = u.full_name?.toLowerCase().includes(search.toLowerCase()) || u.email?.toLowerCase().includes(search.toLowerCase());
-    const matchRole = roleFilter === 'all' || u.role === roleFilter;
-    return matchSearch && matchRole;
-  });
-
-  const clientMap = {};
-  clients.forEach(c => { clientMap[c.id] = c.name; });
+  const clientMap = Object.fromEntries(clients.map((client) => [client.id, client.name]));
+  const filteredUsers = useMemo(() => users.filter((user) => {
+    const matchesSearch = [user.full_name, user.email, clientMap[user.client_organization_id]].filter(Boolean).join(' ').toLowerCase().includes(search.toLowerCase());
+    const matchesRole = roleFilter === 'all' || user.role === roleFilter;
+    return matchesSearch && matchesRole;
+  }), [users, search, roleFilter, clientMap]);
 
   return (
-    <div>
-      <PageHeader title="User Profiles" description="Manage staff and client user accounts, role assignments, and organization links."
-        helpText="User profiles extend the built-in auth system with app-specific roles and organization links.">
-        <Button size="sm" className="gap-2" onClick={() => { setForm(emptyUser); setShowForm(true); }}><Plus className="w-4 h-4" /> Add User</Button>
+    <div className="space-y-6">
+      <PageHeader title="User Profiles" description="Manage staff and client portal access roles for the v2 session and timeline workflow.">
+        <Button size="sm" className="gap-2" onClick={() => setShowForm(true)}><Plus className="h-4 w-4" /> Add User</Button>
       </PageHeader>
 
-      <DocumentationPageIntro
-        header={{
-          title: 'User Profile Operating Overview',
-          purpose: 'User profiles extend authentication with app-specific role, organization, and workflow scoping data.',
-          role: 'Company admins maintain these records so staff and client users enter the correct operational surfaces without custom workarounds.',
-          workflowSummary: 'Create the profile, assign the correct role, attach client-side users to their organization when needed, and keep active/inactive status current.',
-          visibilityRules: 'Roles determine which internal workflows are available. Client-linked users must never be given internal-only operational access by leaving organization scope blank.',
-          nextSteps: 'After profile setup, verify that the user sees the correct project, session, and portal surfaces for their role.'
-        }}
-        guide={{
-          title: 'Role Assignment Guidance',
-          sections: [
-            { heading: 'Operational Reminder', body: 'Stay aligned with the current in-house role model. Do not create ad hoc roles when existing Base44 entities already define the intended workflow boundary.' },
-          ],
-        }}
-      />
+      <DocumentationPageIntro guide={{ title: PAGE_GUIDANCE.users.title, sections: PAGE_GUIDANCE.users.sections }} />
 
-      <div className="flex items-center gap-3 mb-4 flex-wrap">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Search users..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+      <div className="flex flex-wrap gap-3">
+        <div className="relative max-w-sm flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search users or organizations" />
         </div>
         <Select value={roleFilter} onValueChange={setRoleFilter}>
-          <SelectTrigger className="w-48"><SelectValue placeholder="Filter by role" /></SelectTrigger>
+          <SelectTrigger className="w-52"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Roles</SelectItem>
-            {ROLES.map(r => <SelectItem key={r} value={r}>{r.replace(/_/g, ' ')}</SelectItem>)}
+            <SelectItem value="all">All roles</SelectItem>
+            {ROLES.map((role) => <SelectItem key={role} value={role}>{role.replace(/_/g, ' ')}</SelectItem>)}
           </SelectContent>
         </Select>
       </div>
 
-      {isLoading ? (
-        <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-muted border-t-primary rounded-full animate-spin" /></div>
-      ) : filtered.length === 0 ? (
-        <EmptyState icon={Users} title="No users found" description="Add user profiles to manage staff and client access." />
-      ) : (
+      {isLoading ? <div className="flex justify-center py-12"><div className="h-6 w-6 animate-spin rounded-full border-2 border-muted border-t-primary" /></div> : filteredUsers.length === 0 ? <EmptyState icon={Users} title="No users found" description="Create a user profile to grant workflow or portal access." /> : (
         <div className="grid gap-3">
-          {filtered.map(u => (
-            <Card key={u.id} className="hover:shadow-md transition-shadow">
-              <CardContent className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
-                    {u.full_name?.charAt(0)?.toUpperCase() || '?'}
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold">{u.full_name}</p>
-                    <p className="text-xs text-muted-foreground">{u.email} {u.client_organization_id ? `· ${clientMap[u.client_organization_id] || 'Client Org'}` : ''}</p>
-                  </div>
+          {filteredUsers.map((user) => (
+            <Card key={user.id}>
+              <CardContent className="flex items-center justify-between gap-3 p-4">
+                <div>
+                  <p className="text-sm font-semibold">{user.full_name}</p>
+                  <p className="text-xs text-muted-foreground">{user.email} · {clientMap[user.client_organization_id] || 'Internal user'}</p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="text-xs">{u.role?.replace(/_/g, ' ')}</Badge>
-                  {!u.is_active && <Badge variant="destructive" className="text-xs">Inactive</Badge>}
-                  <Button variant="ghost" size="icon" onClick={() => openEdit(u)}><Pencil className="w-4 h-4" /></Button>
+                <div className="flex flex-wrap gap-2">
+                  <Badge>{user.role?.replace(/_/g, ' ')}</Badge>
+                  <Badge variant="outline">{user.is_active ? 'Active' : 'Inactive'}</Badge>
                 </div>
               </CardContent>
             </Card>
@@ -125,40 +76,22 @@ export default function UsersPage() {
         </div>
       )}
 
-      <Dialog open={showForm} onOpenChange={(o) => { if (!o) closeForm(); }}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{editing ? 'Edit User Profile' : 'New User Profile'}</DialogTitle></DialogHeader>
+      <Dialog open={showForm} onOpenChange={(open) => { if (!open) { setShowForm(false); setForm(emptyUser); } }}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader><DialogTitle>New user profile</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label>Full Name *</Label><Input value={form.full_name} onChange={e => setForm({ ...form, full_name: e.target.value })} /></div>
-              <div><Label>Email *</Label><Input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div><Label>Full name *</Label><Input value={form.full_name} onChange={(event) => setForm((current) => ({ ...current, full_name: event.target.value }))} /></div>
+              <div><Label>Email *</Label><Input value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} /></div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label>Role *</Label>
-                <Select value={form.role} onValueChange={v => setForm({ ...form, role: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{ROLES.map(r => <SelectItem key={r} value={r}>{r.replace(/_/g, ' ')}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div><Label>Client Organization</Label>
-                <Select value={form.client_organization_id || 'none'} onValueChange={v => setForm({ ...form, client_organization_id: v === 'none' ? '' : v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None (Company User)</SelectItem>
-                    {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div><Label>Role</Label><Select value={form.role} onValueChange={(value) => setForm((current) => ({ ...current, role: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{ROLES.map((role) => <SelectItem key={role} value={role}>{role.replace(/_/g, ' ')}</SelectItem>)}</SelectContent></Select></div>
+              <div><Label>Client organization</Label><Select value={form.client_organization_id || 'none'} onValueChange={(value) => setForm((current) => ({ ...current, client_organization_id: value === 'none' ? '' : value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem>{clients.map((client) => <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>)}</SelectContent></Select></div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label>Job Title</Label><Input value={form.job_title} onChange={e => setForm({ ...form, job_title: e.target.value })} /></div>
-              <div><Label>Phone</Label><Input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} /></div>
-            </div>
-            <div><Label>Internal Notes</Label><Textarea value={form.internal_notes} onChange={e => setForm({ ...form, internal_notes: e.target.value })} /></div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={closeForm}>Cancel</Button>
-            <Button onClick={handleSave} disabled={!form.full_name || !form.email}>{editing ? 'Update' : 'Create'}</Button>
+            <Button variant="outline" onClick={() => { setShowForm(false); setForm(emptyUser); }}>Cancel</Button>
+            <Button onClick={() => createMut.mutate(form)} disabled={!form.full_name || !form.email}>Create User</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

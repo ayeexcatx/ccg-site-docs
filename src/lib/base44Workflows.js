@@ -175,25 +175,28 @@ export function validateProjectReadiness({ project, segments = [], sessions = []
 }
 
 export async function getRoleAwareDashboardData({ role, profile }) {
-  const [projects, sessions, mediaFiles, reviewCases, clients, markers] = await Promise.all([
+  const [projects, sessions, mediaFiles, reviewCases, clients, entries, timelineItems] = await Promise.all([
     safeList('Project', '-created_date', 50),
     safeList('CaptureSession', '-created_date', 50),
     safeList('MediaFile', '-created_date', 100),
     safeList('ReviewCase', '-created_date', 50),
     safeList('ClientOrganization', '-created_date', 50),
-    safeList('MediaMarker', '-created_date', 100),
+    safeList('CaptureSessionEntry', '-created_date', 100),
+    safeList('TimelineIndexItem', '-created_date', 100),
   ]);
 
   if (['client_manager', 'client_viewer'].includes(role)) {
     const scopedProjects = projects.filter((project) => project.published_to_client && (!profile?.client_organization_id || project.client_organization_id === profile.client_organization_id));
-    const scopedReviewCases = reviewCases.filter((item) => item.client_organization_id && item.client_organization_id === profile?.client_organization_id);
+    const scopedProjectIds = new Set(scopedProjects.map((project) => project.id));
     return {
       projects: scopedProjects,
       sessions: [],
-      mediaFiles: mediaFiles.filter((file) => scopedProjects.some((project) => project.id === file.project_id) && file.publish_to_client),
-      reviewCases: scopedReviewCases,
+      mediaFiles: mediaFiles.filter((file) => scopedProjectIds.has(file.project_id) && file.publish_to_client),
+      reviewCases: reviewCases.filter((item) => !item.client_organization_id || item.client_organization_id === profile?.client_organization_id),
       clients: clients.filter((client) => client.id === profile?.client_organization_id),
-      markers: markers.filter((marker) => marker.is_client_visible && scopedProjects.some((project) => project.id === marker.project_id)),
+      entries: [],
+      timelineItems: timelineItems.filter((item) => scopedProjectIds.has(item.project_id) && item.publish_to_client),
+      markers: [],
     };
   }
 
@@ -205,12 +208,14 @@ export async function getRoleAwareDashboardData({ role, profile }) {
       sessions: scopedSessions,
       mediaFiles: mediaFiles.filter((file) => projectIds.has(file.project_id)),
       reviewCases: reviewCases.filter((item) => projectIds.has(item.project_id)),
-      clients: clients,
-      markers: markers.filter((marker) => projectIds.has(marker.project_id)),
+      clients,
+      entries: entries.filter((entry) => projectIds.has(entry.project_id)),
+      timelineItems: timelineItems.filter((item) => projectIds.has(item.project_id)),
+      markers: [],
     };
   }
 
-  return { projects, sessions, mediaFiles, reviewCases, clients, markers };
+  return { projects, sessions, mediaFiles, reviewCases, clients, entries, timelineItems, markers: [] };
 }
 
 export async function loadSystemInstructionsForPage({ pageKey, role }) {

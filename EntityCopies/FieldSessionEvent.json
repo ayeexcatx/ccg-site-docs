@@ -2,46 +2,18 @@
   "name": "FieldSessionEvent",
   "type": "object",
   "properties": {
-    "capture_session_id": {
-      "type": "string"
-    },
-    "project_id": {
-      "type": "string"
-    },
+    "capture_session_id": { "type": "string" },
+    "project_id": { "type": "string" },
     "event_type": {
       "type": "string",
-      "enum": [
-        "session_start",
-        "session_pause",
-        "session_resume",
-        "session_end",
-        "intersection",
-        "curb_ramp",
-        "landmark",
-        "address_anchor",
-        "issue_note",
-        "custom"
-      ],
-      "default": "intersection"
+      "enum": ["session_start", "session_pause", "session_resume", "session_end", "observation", "gps_pairing", "issue_note", "milestone", "custom"],
+      "default": "observation"
     },
-    "event_label": {
-      "type": "string"
-    },
-    "event_note": {
-      "type": "string"
-    },
-    "timestamp_offset_seconds": {
-      "type": "number"
-    },
-    "map_latitude": {
-      "type": "number"
-    },
-    "map_longitude": {
-      "type": "number"
-    }
+    "event_label": { "type": "string" },
+    "event_note": { "type": "string" },
+    "timestamp_offset_seconds": { "type": "number" },
+    "map_latitude": { "type": "number" },
+    "map_longitude": { "type": "number" }
   },
-  "required": [
-    "capture_session_id",
-    "event_type"
-  ]
+  "required": ["capture_session_id", "event_type"]
 }

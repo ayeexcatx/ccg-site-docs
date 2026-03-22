@@ -33,7 +33,7 @@ export function canAccessPath({ role, path }) {
   }
 
   if (role === 'documenter') {
-    const allowed = ['/', '/projects', '/projects/', '/sessions', '/field', '/media', '/markers'];
+    const allowed = ['/', '/projects', '/projects/', '/sessions', '/session-entries', '/field', '/media', '/timeline-review'];
     return allowed.some((prefix) => path === prefix || path.startsWith(prefix));
   }
 

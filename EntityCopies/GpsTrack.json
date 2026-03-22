@@ -1,0 +1,25 @@
+{
+  "name": "GpsTrack",
+  "type": "object",
+  "properties": {
+    "project_id": { "type": "string" },
+    "capture_session_id": { "type": "string" },
+    "track_name": { "type": "string" },
+    "track_format": {
+      "type": "string",
+      "enum": ["gpx", "fit", "geojson", "manual"],
+      "default": "gpx"
+    },
+    "track_file_url": { "type": "string" },
+    "sample_count": { "type": "number" },
+    "track_start_time": { "type": "string" },
+    "track_end_time": { "type": "string" },
+    "pairing_status": {
+      "type": "string",
+      "enum": ["unpaired", "candidate_match", "paired", "needs_review"],
+      "default": "unpaired"
+    },
+    "notes": { "type": "string" }
+  },
+  "required": ["project_id", "track_name"]
+}
