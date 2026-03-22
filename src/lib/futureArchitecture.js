@@ -126,6 +126,30 @@ export function buildRouteMediaSyncEnvelope({ route = null, checkpoints = [], me
 }
 
 export function buildMarkerSuggestionContext({ marker = null, mediaFile = null, route = null, checkpoints = [], assetLocations = [] }) {
+  const mediaLabel = mediaFile?.media_title || mediaFile?.original_filename || 'Selected media';
+  const defaultSuggestedMarkers = [
+    {
+      id: `draft-landmark-${mediaFile?.id || 'sample'}`,
+      title: 'Draft landmark candidate',
+      markerType: 'landmark',
+      draftLabel: marker?.marker_label ? `${marker.marker_label} (AI draft variant)` : 'Potential landmark or business frontage',
+      timestampLabel: marker?.timestamp_seconds != null ? `${Math.round(marker.timestamp_seconds)}s reference point` : 'Awaiting timeline estimate',
+      evidenceNote: `Reserved placeholder for future landmark/business suggestions on ${mediaLabel}.`,
+      provenance: 'No provider connected yet — internal draft contract only.',
+      status: 'Draft only',
+    },
+    {
+      id: `draft-sign-${mediaFile?.id || 'sample'}`,
+      title: 'Draft sign candidate',
+      markerType: 'sign',
+      draftLabel: 'Potential regulatory or wayfinding sign',
+      timestampLabel: 'Awaiting timeline estimate',
+      evidenceNote: 'Use this slot for future sign detection suggestions once approved internal tooling exists.',
+      provenance: 'Placeholder only; must be reviewed and rewritten by staff.',
+      status: 'Draft only',
+    },
+  ];
+
   return {
     markerId: marker?.id || null,
     mediaFileId: mediaFile?.id || marker?.media_file_id || null,
@@ -133,11 +157,57 @@ export function buildMarkerSuggestionContext({ marker = null, mediaFile = null, 
     nearbyCheckpointCount: checkpoints.length,
     nearbyAssetCount: assetLocations.length,
     suggestionStatus: 'awaiting_internal_ai_provider',
-    suggestedMarkers: [],
+    suggestedMarkers: defaultSuggestedMarkers,
     reviewerGuardrails: [
       'Treat machine-generated suggestions as draft evidence only.',
       'Do not elevate suggestion output directly to confirmed or client-visible status.',
       'Record provenance so staff can see which provider or ruleset produced the suggestion.',
+      'AI is an assistant only and must never replace staff judgment in the evidence workflow.',
+    ],
+    reviewActions: [
+      {
+        key: 'accept_to_manual_draft',
+        label: 'Accept into manual draft',
+        description: 'Copies the suggestion into the manual review workflow for staff editing before any visibility decision.',
+      },
+      {
+        key: 'edit_before_save',
+        label: 'Edit before saving',
+        description: 'Requires staff to adjust labels, timestamps, notes, and linked evidence before the record is kept.',
+      },
+      {
+        key: 'reject_suggestion',
+        label: 'Reject suggestion',
+        description: 'Dismisses the draft suggestion when it is inaccurate, unsupported, or not useful for the review case.',
+      },
+    ],
+  };
+}
+
+export function buildMediaAiPreparation({ mediaFile = null, markerCount = 0, publishReadiness = 'not_reviewed' }) {
+  const mediaLabel = mediaFile?.media_title || mediaFile?.original_filename || 'Selected media record';
+
+  return {
+    mediaId: mediaFile?.id || null,
+    mediaLabel,
+    preparationStatus: 'draft_preparation_only',
+    requiredReviewMessage: 'AI is an assistant only. Any future tagging suggestions must be reviewed, edited as needed, and approved by staff before they become part of the evidence workflow or anything client-visible.',
+    placeholderQueues: [
+      {
+        key: 'landmark_business_candidates',
+        title: 'Landmark / business suggestion queue',
+        description: 'Reserved for future draft suggestions tied to storefronts, landmarks, and business frontage that staff can compare against route context and media evidence.',
+      },
+      {
+        key: 'sign_candidates',
+        title: 'Sign suggestion queue',
+        description: 'Reserved for future sign tagging drafts so staff can confirm sign type, wording, and timestamp before anything is retained.',
+      },
+    ],
+    workflowHooks: [
+      `Media remains in the normal manual workflow first, with ${markerCount} current marker records available for human review context.`,
+      `Current publish readiness is ${publishReadiness}; draft AI suggestions should not change this state automatically.`,
+      'Reviewers should use preview-safe derivatives, internal notes, and marker review panels to validate any future suggestions.',
     ],
   };
 }
