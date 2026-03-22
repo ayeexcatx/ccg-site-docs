@@ -13,6 +13,14 @@ function buildEntityMap(records = []) {
   return Object.fromEntries(toArray(records).map((record) => [record.id, record]));
 }
 
+function toSearchText(...parts) {
+  return parts
+    .flatMap((part) => (Array.isArray(part) ? part : [part]))
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+}
+
 export function getVisibilityLabelForRecord(record = {}, clientField = 'client_visible_notes', internalField = 'internal_notes', visibleFlag = 'is_client_visible') {
   // Visibility is intentionally derived from the same Base44 fields pages already use.
   // Keeping this in one helper prevents subtle page-level disagreements.
@@ -63,6 +71,21 @@ export function getRoutePathSummary(routePoints = [], checkpoints = []) {
     completenessLabel: routePoints.length >= 2 && hasRequiredAnchors ? 'Operationally complete' : 'Needs review',
     hasRequiredAnchors,
   };
+}
+
+export function getRouteValidationWarnings({ projectId, segmentId, sessionId, routeName, routePoints = [], checkpoints = [] }) {
+  const routeSummary = getRoutePathSummary(routePoints, checkpoints);
+  const warnings = [];
+
+  if (!projectId) warnings.push('Choose a project before building or saving a route.');
+  if (!segmentId) warnings.push('Choose a segment so the route is attached to the correct geography.');
+  if (!sessionId) warnings.push('Choose a capture session so field timing and review tools can reuse this route.');
+  if (!routeName?.trim()) warnings.push('Add a route name so reviewers can identify the operational path quickly.');
+  if (routePoints.length < 2) warnings.push('Add at least two map points to create a usable route path.');
+  if (!routeSummary.hasRequiredAnchors) warnings.push('Add both a start checkpoint and an end checkpoint before saving.');
+  if (toArray(checkpoints).some((checkpoint) => !checkpoint.checkpoint_label?.trim())) warnings.push('Rename any blank checkpoint labels so field and QA users can interpret them.');
+
+  return warnings;
 }
 
 export function getSegmentCoverageSummary({ segments = [], routes = [], sessions = [], media = [] }) {
@@ -133,6 +156,33 @@ export function getProjectReadinessSummary({ project, segments = [], sessions = 
   };
 }
 
+export function getProjectDetailSummary({ project, segments = [], sessions = [], media = [], markers = [], routes = [] }) {
+  const readiness = getProjectReadinessSummary({ project, segments, sessions, media, markers, routes });
+  const mediaCounts = toArray(media).reduce((accumulator, item) => {
+    const key = item.media_type || 'unknown';
+    accumulator[key] = (accumulator[key] || 0) + 1;
+    return accumulator;
+  }, {});
+  const markerCounts = toArray(markers).reduce((accumulator, item) => {
+    const key = getVisibilityLabelForRecord(item) || 'unknown';
+    accumulator[key] = (accumulator[key] || 0) + 1;
+    return accumulator;
+  }, {});
+
+  // These cards drive the project-level publish gate, so we keep the rule definitions here
+  // instead of duplicating them inside the page component.
+  const summaryCards = [
+    { label: 'Segments', value: `${segments.length}`, detail: `${readiness.summary.coverage.routedSegments} routed / ${readiness.summary.coverage.totalSegments} total`, ready: readiness.summary.coverage.routeCompleteness === 100 },
+    { label: 'Sessions', value: `${sessions.length}`, detail: `${readiness.summary.completeSessions}/${readiness.summary.totalSessions} approved or published`, ready: readiness.summary.completeSessions === readiness.summary.totalSessions && readiness.summary.totalSessions > 0 },
+    { label: 'Media', value: `${media.length}`, detail: `${readiness.summary.mediaAttached} attached files ready for review`, ready: readiness.uploadReadiness },
+    { label: 'Markers', value: `${markers.length}`, detail: `${readiness.summary.reviewedMarkers}/${readiness.summary.totalMarkers} confirmed`, ready: readiness.reviewReadiness },
+    { label: 'Publish state', value: readiness.publishReadiness ? 'Ready' : 'Blocked', detail: project?.published_to_client ? 'Already published to client.' : 'Internal readiness gate for publication.', ready: readiness.publishReadiness },
+    { label: 'Missing required items', value: `${readiness.blockers.length}`, detail: readiness.blockers.length === 0 ? 'No blockers detected.' : 'Outstanding publish blockers remain.', ready: readiness.blockers.length === 0 },
+  ];
+
+  return { readiness, mediaCounts, markerCounts, summaryCards };
+}
+
 export function getFieldSessionSummary(params = {}) {
   const { checkpoints = [], events = [], finalElapsedSeconds } = params;
   const orderedEvents = toArray(events).slice().sort((left, right) => (left.timestamp_offset_seconds || 0) - (right.timestamp_offset_seconds || 0));
@@ -164,6 +214,23 @@ export function getFieldSessionSummary(params = {}) {
   };
 }
 
+export function getFieldSessionViewModel({ checkpoints = [], storedEvents = [], localEvents = [], timer = { elapsed: 0, isRunning: false } }) {
+  const sessionSummary = getFieldSessionSummary({ checkpoints, events: [...toArray(storedEvents), ...toArray(localEvents)] });
+  const groupedEvents = sessionSummary.groupedEvents;
+  const eventCards = [
+    { label: 'Total events', value: sessionSummary.totalEvents, detail: 'All lifecycle, checkpoint, and issue-note events recorded for this run.' },
+    { label: 'Checkpoint hits', value: groupedEvents.checkpoints.length, detail: 'Reference points logged while moving through the route.' },
+    { label: 'Notes/issues', value: groupedEvents.notes.length, detail: 'Context entries explaining interruptions, misses, or review concerns.' },
+    { label: 'Timer', value: formatTimestamp(timer.elapsed), detail: timer.isRunning ? 'Live timer state for the active field session.' : 'Timer is idle until a session is started.' },
+  ];
+
+  return {
+    sessionSummary,
+    groupedEvents,
+    eventCards,
+  };
+}
+
 export function getMarkerReviewSummary(params = {}) {
   const { markers = [], mediaFiles = [], projects = [], sessions = [], checkpoints = [], assetLocations = [], filters = {} } = params;
   const mediaMap = buildEntityMap(mediaFiles);
@@ -183,7 +250,7 @@ export function getMarkerReviewSummary(params = {}) {
 
   const filteredMarkers = toArray(markers).filter((marker) => {
     const media = mediaMap[marker.media_file_id];
-    const searchText = `${marker.marker_label} ${media?.media_title || ''}`.toLowerCase();
+    const searchText = toSearchText(marker.marker_label, media?.media_title || '');
     const matchesStructuredFilters = filterDefinitions.every(({ key, getValue }) => !filters[key] || filters[key] === 'all' || getValue(marker) === filters[key]);
     return matchesStructuredFilters && searchText.includes((filters.search || '').toLowerCase());
   });
@@ -257,5 +324,63 @@ export function getClientVisibleProjectData({ project, segments = [], media = []
     media: publishedMedia,
     markers: clientVisibleMarkers,
     groupedMedia: groupMediaBySegmentViewSession(publishedMedia),
+  };
+}
+
+export function getClientProjectViewerModel({ project, segments = [], media = [], markers = [], search = '', selectedSegmentId = 'all', selectedViewType = 'all' }) {
+  const clientVisibleProjectData = getClientVisibleProjectData({ project, segments, media, markers });
+  const publishedMedia = clientVisibleProjectData.media;
+  const clientMarkers = clientVisibleProjectData.markers;
+  const segmentMap = buildEntityMap(clientVisibleProjectData.segments);
+  const mediaMap = buildEntityMap(publishedMedia);
+  const normalizedSearch = search.toLowerCase();
+  const viewTypeOptions = [...new Set(publishedMedia.map((item) => item.view_type).filter(Boolean))];
+
+  const filteredSegments = clientVisibleProjectData.segments.filter((segment) => {
+    const matchesSearch = toSearchText(segment.street_name, segment.from_intersection, segment.to_intersection).includes(normalizedSearch);
+    return matchesSearch && (selectedSegmentId === 'all' || selectedSegmentId === segment.id);
+  });
+
+  const filteredMedia = publishedMedia.filter((item) => {
+    const matchesSearch = toSearchText(item.media_title, item.client_visible_notes).includes(normalizedSearch);
+    const matchesSegment = selectedSegmentId === 'all' || item.street_segment_id === selectedSegmentId;
+    const matchesViewType = selectedViewType === 'all' || item.view_type === selectedViewType;
+    return matchesSearch && matchesSegment && matchesViewType;
+  });
+
+  const filteredMarkers = clientMarkers.filter((marker) => {
+    const mediaFile = mediaMap[marker.media_file_id];
+    const matchesSearch = toSearchText(marker.marker_label, marker.client_visible_notes, mediaFile?.media_title).includes(normalizedSearch);
+    const matchesSegment = selectedSegmentId === 'all' || mediaFile?.street_segment_id === selectedSegmentId;
+    return matchesSearch && matchesSegment;
+  });
+
+  const groupedMedia = filteredMedia.reduce((accumulator, item) => {
+    const key = item.street_segment_id || 'unassigned';
+    accumulator[key] ||= [];
+    accumulator[key].push(item);
+    return accumulator;
+  }, {});
+
+  const groupedMarkers = filteredMarkers.reduce((accumulator, marker) => {
+    const mediaFile = mediaMap[marker.media_file_id];
+    const key = mediaFile?.street_segment_id || 'unassigned';
+    accumulator[key] ||= [];
+    accumulator[key].push({ marker, mediaFile });
+    return accumulator;
+  }, {});
+
+  return {
+    clientVisibleProjectData,
+    publishedMedia,
+    clientMarkers,
+    segmentMap,
+    mediaMap,
+    viewTypeOptions,
+    filteredSegments,
+    filteredMedia,
+    filteredMarkers,
+    groupedMedia,
+    groupedMarkers,
   };
 }

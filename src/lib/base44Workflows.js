@@ -1,5 +1,5 @@
 import { base44 } from '@/api/base44Client';
-import { getFieldSessionSummary, getProjectReadinessSummary, getVisibilityLabelForRecord, orderCheckpoints } from '@/lib/domainWorkflows';
+import { getFieldSessionSummary, getProjectReadinessSummary, orderCheckpoints } from '@/lib/domainWorkflows';
 
 const safeList = async (entityName, sort = '-created_date', limit = 200) => {
   try {
@@ -129,9 +129,6 @@ export async function syncMarkersFromRouteAndDuration({ checkpoints = [], mediaF
   return Promise.all(operations);
 }
 
-export function getVisibilityState(record = {}, clientField = 'client_visible_notes', internalField = 'internal_notes', visibleFlag = 'is_client_visible') {
-  return getVisibilityLabelForRecord(record, clientField, internalField, visibleFlag);
-}
 
 export function validateProjectReadiness({ project, segments = [], sessions = [], media = [], markers = [], routes = [] }) {
   return getProjectReadinessSummary({ project, segments, sessions, media, markers, routes });

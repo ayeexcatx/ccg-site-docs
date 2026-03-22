@@ -15,7 +15,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { DocumentationPageIntro, QAReviewChecklist, VisibilityRulesPanel, WorkflowStepsPanel, InstructionPanel } from '@/components/ui/OperatingGuidance';
 import FutureReadyPanel from '@/components/ui/FutureReadyPanel';
 import { addRouteCheckpoint, reorderRouteCheckpoints, saveDrawnRoutePath } from '@/lib/base44Workflows';
-import { getRoutePathSummary, orderCheckpoints } from '@/lib/domainWorkflows';
+import { getRoutePathSummary, getRouteValidationWarnings, orderCheckpoints } from '@/lib/domainWorkflows';
 import { buildRouteMediaSyncEnvelope } from '@/lib/futureArchitecture';
 import { usePageInstructions } from '@/hooks/usePageInstructions';
 import { CHECKPOINT_TYPE_LABELS } from '@/lib/constants';
@@ -313,17 +313,14 @@ export default function RouteEditor() {
   const routeSummary = useMemo(() => getRoutePathSummary(routeState.routePoints, routeState.checkpoints), [routeState.routePoints, routeState.checkpoints]);
   const syncEnvelope = useMemo(() => buildRouteMediaSyncEnvelope({ route: routes[0], checkpoints: routeState.checkpoints, session: selectedSession }), [routes, routeState.checkpoints, selectedSession]);
 
-  const validationWarnings = useMemo(() => {
-    const warnings = [];
-    if (!routeState.projectId) warnings.push('Choose a project before building or saving a route.');
-    if (!routeState.segmentId) warnings.push('Choose a segment so the route is attached to the correct geography.');
-    if (!routeState.sessionId) warnings.push('Choose a capture session so field timing and review tools can reuse this route.');
-    if (!routeState.routeName?.trim()) warnings.push('Add a route name so reviewers can identify the operational path quickly.');
-    if (routeState.routePoints.length < 2) warnings.push('Add at least two map points to create a usable route path.');
-    if (!routeSummary.hasRequiredAnchors) warnings.push('Add both a start checkpoint and an end checkpoint before saving.');
-    if (routeState.checkpoints.some((checkpoint) => !checkpoint.checkpoint_label?.trim())) warnings.push('Rename any blank checkpoint labels so field and QA users can interpret them.');
-    return warnings;
-  }, [routeState.projectId, routeState.segmentId, routeState.sessionId, routeState.routeName, routeState.routePoints.length, routeState.checkpoints, routeSummary.hasRequiredAnchors]);
+  const validationWarnings = useMemo(() => getRouteValidationWarnings({
+    projectId: routeState.projectId,
+    segmentId: routeState.segmentId,
+    sessionId: routeState.sessionId,
+    routeName: routeState.routeName,
+    routePoints: routeState.routePoints,
+    checkpoints: routeState.checkpoints,
+  }), [routeState.projectId, routeState.segmentId, routeState.sessionId, routeState.routeName, routeState.routePoints, routeState.checkpoints]);
 
   useEffect(() => {
     if (!selectedSession) return;

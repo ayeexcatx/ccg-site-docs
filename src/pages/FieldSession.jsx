@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { DocumentationPageIntro, QAReviewChecklist, VisibilityRulesPanel, WorkflowStepsPanel, InstructionPanel } from '@/components/ui/OperatingGuidance';
 import { logFieldSessionEvent } from '@/lib/base44Workflows';
-import { getFieldSessionSummary } from '@/lib/domainWorkflows';
+import { getFieldSessionSummary, getFieldSessionViewModel } from '@/lib/domainWorkflows';
 import { usePageInstructions } from '@/hooks/usePageInstructions';
 import { formatTimestamp, getWorkflowStateLabel } from '@/lib/displayUtils';
 import { Activity, CornerDownRight, Landmark, Pause, Play, Square, StickyNote, Crosshair, Route } from 'lucide-react';
@@ -62,15 +62,9 @@ export default function FieldSession() {
   const { data: storedEvents = [] } = useQuery({ queryKey: ['field-events', selectedSessionId], queryFn: () => base44.entities.FieldSessionEvent.filter({ capture_session_id: selectedSessionId }), enabled: !!selectedSessionId });
   const activeSession = useMemo(() => sessions.find((session) => session.id === selectedSessionId), [sessions, selectedSessionId]);
   const { timer, start, togglePause, stop } = useFieldSessionTimer(activeSession);
-  const sessionSummary = useMemo(() => getFieldSessionSummary({ checkpoints: routeCheckpoints, events: [...storedEvents, ...localEvents] }), [routeCheckpoints, storedEvents, localEvents]);
+  const fieldSessionViewModel = useMemo(() => getFieldSessionViewModel({ checkpoints: routeCheckpoints, storedEvents, localEvents, timer }), [routeCheckpoints, storedEvents, localEvents, timer]);
+  const { sessionSummary, groupedEvents, eventCards } = fieldSessionViewModel;
   const sessionEvents = sessionSummary.orderedEvents;
-  const groupedEvents = sessionSummary.groupedEvents;
-  const eventCards = useMemo(() => ([
-    { label: 'Total events', value: sessionSummary.totalEvents, detail: 'All lifecycle, checkpoint, and issue-note events recorded for this run.' },
-    { label: 'Checkpoint hits', value: groupedEvents.checkpoints.length, detail: 'Reference points logged while moving through the route.' },
-    { label: 'Notes/issues', value: groupedEvents.notes.length, detail: 'Context entries explaining interruptions, misses, or review concerns.' },
-    { label: 'Timer', value: formatTimestamp(timer.elapsed), detail: timer.isRunning ? 'Live timer state for the active field session.' : 'Timer is idle until a session is started.' },
-  ]), [groupedEvents.checkpoints.length, groupedEvents.notes.length, sessionSummary.totalEvents, timer.elapsed, timer.isRunning]);
 
   const createEventMut = useMutation({ mutationFn: ({ eventType, eventLabel, eventNote, seconds }) => logFieldSessionEvent({ session: activeSession, eventType, eventLabel, eventNote, timestampOffsetSeconds: seconds }), onSuccess: (event) => { setLocalEvents((current) => [...current, event]); queryClient.invalidateQueries({ queryKey: ['field-events', selectedSessionId] }); } });
   const updateSessionMut = useMutation({ mutationFn: ({ id, data }) => base44.entities.CaptureSession.update(id, data) });
