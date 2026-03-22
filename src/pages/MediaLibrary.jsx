@@ -5,6 +5,7 @@ import PageHeader from '@/components/ui/PageHeader';
 import StatusBadge from '@/components/ui/StatusBadge';
 import EmptyState from '@/components/ui/EmptyState';
 import FutureReadyPanel from '@/components/ui/FutureReadyPanel';
+import AiDraftSuggestionPanel from '@/components/ui/AiDraftSuggestionPanel';
 import {
   DocumentationPageIntro,
   QAReviewChecklist,
@@ -145,6 +146,7 @@ export default function MediaLibrary() {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [uploadMatcherInput, setUploadMatcherInput] = useState('');
+  const [aiReviewStates, setAiReviewStates] = useState({});
   const queryClient = useQueryClient();
 
   const { data: mediaFiles = [], isLoading } = useQuery({
@@ -232,6 +234,26 @@ export default function MediaLibrary() {
 
   const selectedStorage = resolveStorageAdapter(form.storage_mode);
   const selectedViewer = createViewerCapabilityMatrix(form);
+
+  const aiMediaDraftSuggestions = useMemo(() => [
+    {
+      id: 'media-draft-tagging-queue',
+      title: 'Future media tagging queue placeholder',
+      badges: ['Draft only', 'Media workflow'],
+      summary: 'Reserved for future AI-assisted scene, landmark, sign, or business tagging suggestions linked to media records. Suggestions remain internal until staff review them and convert them into normal evidence records.',
+      fields: [
+        { label: 'Suggested source', value: 'Approved internal AI provider (future)', helper: 'Do not connect unapproved external providers directly into evidence workflows.' },
+        { label: 'Output destination', value: 'Marker Review + internal QA', helper: 'AI findings should feed review queues, not skip directly to client publishing.' },
+        { label: 'Client visibility', value: 'Blocked by default', helper: 'Staff review is required before anything becomes evidence or portal-visible.' },
+        { label: 'Media linkage', value: form.media_title || 'No media selected yet', helper: 'Future suggestions should always point back to a specific media record.' },
+      ],
+      reviewNote: 'Accept = move the draft into a manual review queue, Edit = refine metadata before use, Reject = discard the suggestion with no client impact.',
+    },
+  ], [form.media_title]);
+
+  const handleAiReviewAction = (suggestionId, nextState) => {
+    setAiReviewStates((current) => ({ ...current, [suggestionId]: nextState }));
+  };
 
   return (
     <div className="space-y-6">
@@ -375,6 +397,15 @@ segment-curb.mp4`} className="min-h-24" />
             extensionPoints: storageBlueprints.map((adapter) => `${adapter.label}: ${adapter.adminNotes}`),
           },
         ]}
+      />
+
+      <AiDraftSuggestionPanel
+        title="Draft AI media suggestion area"
+        description="This panel prepares Media Library for future AI-assisted tagging intake while keeping today's workflow manual-first, review-driven, and fully staff-controlled. Any AI output remains draft-only until staff approve it."
+        suggestions={aiMediaDraftSuggestions}
+        reviewStateMap={aiReviewStates}
+        onReviewAction={handleAiReviewAction}
+        emptyMessage="No AI media suggestions are connected. Continue registering and reviewing media manually until a staff-approved internal AI assistant is added."
       />
 
       <div className="flex items-center gap-3 flex-wrap">
@@ -589,6 +620,14 @@ segment-curb.mp4`} className="min-h-24" />
                   <DetailRow label="Client-facing record" value={form.client_safe_media_id || 'Use this record directly'} helper="If the original should stay internal, point staff to the approved derivative or sibling publish-safe record here." />
                 </CardContent>
               </Card>
+
+              <AiDraftSuggestionPanel
+                title="AI-assisted media review guardrails"
+                description="If future AI services propose landmarks, signs, businesses, or scene summaries from this media file, staff must treat those outputs as optional drafts only. Human review is required before anything joins the evidence workflow or becomes client-visible."
+                suggestions={aiMediaDraftSuggestions}
+                reviewStateMap={aiReviewStates}
+                onReviewAction={handleAiReviewAction}
+              />
 
               <Card>
                 <CardHeader><CardTitle className="text-base">Admin workflow guidance</CardTitle></CardHeader>
