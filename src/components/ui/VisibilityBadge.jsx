@@ -3,9 +3,9 @@ import { Badge } from '@/components/ui/badge';
 import { getVisibilityLabel } from '@/lib/displayUtils';
 
 const VARIANTS = {
-  internal_only: 'bg-slate-200 text-slate-800',
-  client_visible: 'bg-emerald-100 text-emerald-800',
-  needs_review: 'bg-amber-100 text-amber-800',
+  internal_only: 'border border-slate-300 bg-slate-200 text-slate-900',
+  client_visible: 'border border-emerald-300 bg-emerald-100 text-emerald-900',
+  needs_review: 'border border-amber-300 bg-amber-100 text-amber-900',
 };
 
 const LABELS = {
