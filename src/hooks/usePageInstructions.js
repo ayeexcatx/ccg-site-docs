@@ -4,9 +4,12 @@ import { useUserProfile } from '@/lib/useUserProfile';
 
 export function usePageInstructions(pageKey) {
   const { profile } = useUserProfile();
+  const role = profile?.role || 'anonymous';
 
   return useQuery({
-    queryKey: ['page-instructions', pageKey, profile?.role || 'anonymous'],
-    queryFn: () => loadSystemInstructionsForPage({ pageKey, role: profile?.role || 'anonymous' }),
+    // Page instructions remain a Base44-backed adapter concern so page components can
+    // stay focused on rendering operating guidance rather than rebuilding scope filters.
+    queryKey: ['page-instructions', pageKey, role],
+    queryFn: () => loadSystemInstructionsForPage({ pageKey, role }),
   });
 }

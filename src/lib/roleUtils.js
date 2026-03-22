@@ -25,12 +25,17 @@ export function getRoleCapabilities(role) {
 export function canAccessPath({ role, path }) {
   const capabilities = getRoleCapabilities(role);
   if (!role) return false;
+
+  // Path access is intentionally coarse-grained here: page components still own
+  // finer workflow behavior, while this helper guards the major internal-vs-portal split.
   if (capabilities.client) {
     return path === '/' || path.startsWith('/portal');
   }
+
   if (role === 'documenter') {
     const allowed = ['/', '/projects', '/projects/', '/sessions', '/field', '/media', '/markers'];
     return allowed.some((prefix) => path === prefix || path.startsWith(prefix));
   }
+
   return true;
 }

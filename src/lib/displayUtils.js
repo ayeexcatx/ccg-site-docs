@@ -13,6 +13,11 @@ export function formatTimestamp(seconds, fallback = '—') {
   return `${minutes}:${remainingSeconds}`;
 }
 
+export function formatSecondsWithRawLabel(seconds, fallback = '—') {
+  if (seconds === null || seconds === undefined || Number.isNaN(Number(seconds))) return fallback;
+  return `${formatTimestamp(seconds)} (${Number(seconds)}s)`;
+}
+
 export function getVisibilityLabel(visibility) {
   return formatLabel(visibility);
 }
