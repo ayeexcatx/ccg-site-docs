@@ -2,11 +2,12 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import PageHeader from '@/components/ui/PageHeader';
-import { DocumentationPageIntro } from '@/components/ui/OperatingGuidance';
 import StatusBadge from '@/components/ui/StatusBadge';
 import EmptyState from '@/components/ui/EmptyState';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { DocumentationPageIntro, NextStepPanel } from '@/components/ui/OperatingGuidance';
+import { PAGE_GUIDANCE } from '@/lib/workflowGuidance';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -58,23 +59,8 @@ export default function Clients() {
         </Button>
       </PageHeader>
 
-      <DocumentationPageIntro
-        header={{
-          title: 'Client Organization Operating Overview',
-          purpose: 'Client organizations anchor portal access, project ownership, and communication boundaries across the documentation program.',
-          role: 'Company admins and operational managers maintain these records so downstream users, projects, and publication rules inherit the correct client context.',
-          workflowSummary: 'Create or update the client organization, confirm contact and access defaults, then attach users and projects to that organization.',
-          visibilityRules: 'Internal billing and operational notes stay company-side. Only curated client-visible notes should be written for information intended to appear in portal experiences.',
-          nextSteps: 'After saving the organization, create linked projects and assign client-facing user profiles to the same Base44 client record.'
-        }}
-        guide={{
-          title: 'Client Record Guidance',
-          sections: [
-            { heading: 'Why This Matters', body: 'Keeping the client record accurate prevents portal leakage across organizations and keeps current in-house workflows aligned with the Base44 entity model.' },
-            { heading: 'Operational Reminder', body: 'Default access settings should reflect how CCG currently releases information. Do not use this page to bypass project-level publish review.' },
-          ],
-        }}
-      />
+      <DocumentationPageIntro guide={{ title: PAGE_GUIDANCE.clients.title, sections: PAGE_GUIDANCE.clients.sections }} />
+      <NextStepPanel step={PAGE_GUIDANCE.clients.sections.nextStep} detail="Once the client exists, keep new projects attached to that same client record so portal access stays clean." />
 
       <div className="flex items-center gap-3 mb-4">
         <div className="relative flex-1 max-w-sm">

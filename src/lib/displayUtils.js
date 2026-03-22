@@ -1,3 +1,5 @@
+import { CAPTURE_SESSION_STATUS_MAP } from '@/lib/sessionWorkflow';
+
 export function formatLabel(value, fallback = '—') {
   if (value === null || value === undefined || value === '') return fallback;
   return String(value)
@@ -23,5 +25,6 @@ export function getVisibilityLabel(visibility) {
 }
 
 export function getWorkflowStateLabel(status) {
+  if (CAPTURE_SESSION_STATUS_MAP[status]) return CAPTURE_SESSION_STATUS_MAP[status].label;
   return formatLabel(status);
 }

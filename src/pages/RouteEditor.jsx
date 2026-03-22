@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
-import { MapContainer, Marker, Polyline, Popup, TileLayer, useMapEvents } from 'react-leaflet';
+import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
 import PageHeader from '@/components/ui/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,18 +12,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { DocumentationPageIntro, QAReviewChecklist, VisibilityRulesPanel, WorkflowStepsPanel, InstructionPanel } from '@/components/ui/OperatingGuidance';
+import { DocumentationPageIntro, QAReviewChecklist, VisibilityRulesPanel, WorkflowStepsPanel, InstructionPanel, NextStepPanel } from '@/components/ui/OperatingGuidance';
 import FutureReadyPanel from '@/components/ui/FutureReadyPanel';
 import { addRouteCheckpoint, reorderRouteCheckpoints, saveDrawnRoutePath } from '@/lib/base44Workflows';
 import { getRoutePathSummary, getRouteValidationWarnings, orderCheckpoints } from '@/lib/domainWorkflows';
 import { buildRouteMediaSyncEnvelope } from '@/lib/futureArchitecture';
 import { usePageInstructions } from '@/hooks/usePageInstructions';
 import { CHECKPOINT_TYPE_LABELS } from '@/lib/constants';
-import { AlertTriangle, ArrowDown, ArrowUp, Eye, EyeOff, GripVertical, ListChecks, MapPin, Plus, Save, Trash2, WandSparkles } from 'lucide-react';
+import { PAGE_GUIDANCE } from '@/lib/workflowGuidance';
+import { AlertTriangle, ArrowDown, ArrowUp, Eye, EyeOff, GripVertical, ListChecks, MapPin, Plus, Save, Search, Trash2, Undo2, WandSparkles } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 
 const DEFAULT_CHECKPOINT = { checkpoint_type: 'intersection', checkpoint_label: '', is_client_visible: true };
-const EMPTY_ROUTE_STATE = { projectId: '', segmentId: '', sessionId: '', template: '', routeName: '', routePoints: [], checkpoints: [], warning: '', isDrawing: false };
+const EMPTY_ROUTE_STATE = { projectId: '', segmentId: '', sessionId: '', template: '', routeName: '', routePoints: [], checkpoints: [], warning: '', isDrawing: false, searchQuery: '', searchResults: [] };
 
 const ROUTE_TEMPLATES = {
   linear_walk: {
@@ -60,6 +61,15 @@ function MapClickHandler({ onMapClick }) {
   return null;
 }
 
+
+function MapViewportController({ focusPoint }) {
+  const map = useMap();
+  useEffect(() => {
+    if (focusPoint) map.setView([focusPoint.lat, focusPoint.lng], 18);
+  }, [focusPoint, map]);
+  return null;
+}
+
 function buildTemplateCheckpoints(template) {
   return template.checkpoints.map((checkpoint, index) => ({
     ...checkpoint,
@@ -82,7 +92,7 @@ function StepHint({ step, title, description, active, complete, disabled }) {
   );
 }
 
-function RouteSetupPanel({ projects, projectSegments, segmentSessions, state, setState, selectedProject, selectedSegment, selectedSession, onApplyTemplate, onToggleDrawing, onSave, validationWarnings }) {
+function RouteSetupPanel({ projects, projectSegments, segmentSessions, state, setState, selectedProject, selectedSegment, selectedSession, onApplyTemplate, onToggleDrawing, onSave, onSearchLocation, onUndoLastPoint, validationWarnings, routeSuggestion }) {
   return (
     <Card>
       <CardHeader className="pb-3"><CardTitle className="text-base">Guided Route Setup</CardTitle></CardHeader>
@@ -129,6 +139,15 @@ function RouteSetupPanel({ projects, projectSegments, segmentSessions, state, se
         </div>
 
         <div>
+          <Label>Location Search</Label>
+          <div className="flex gap-2">
+            <Input value={state.searchQuery || ''} onChange={(event) => setState((current) => ({ ...current, searchQuery: event.target.value }))} placeholder="Search address, city, or place" />
+            <Button variant="outline" onClick={onSearchLocation} disabled={!state.searchQuery}><Search className="mr-2 h-4 w-4" /> Find</Button>
+          </div>
+          {!!state.searchResults?.length && <div className="mt-2 rounded-lg border bg-muted/20 p-2 text-xs text-muted-foreground">Top result ready. The map will zoom to the first matching location.</div>}
+        </div>
+
+        <div>
           <Label>Route Template</Label>
           <div className="flex gap-2">
             <Select value={state.template || 'none'} onValueChange={(value) => setState((current) => ({ ...current, template: value === 'none' ? '' : value }))}>
@@ -143,6 +162,7 @@ function RouteSetupPanel({ projects, projectSegments, segmentSessions, state, se
         </div>
 
         <div className="rounded-xl border bg-muted/20 p-4">
+          {routeSuggestion && <p className="mb-2 text-sm text-foreground"><span className="font-semibold">Suggested route pattern:</span> {routeSuggestion}</p>}
           <p className="mb-2 text-sm font-semibold">Drawing workflow</p>
           <ul className="space-y-2 text-sm leading-6 text-muted-foreground">
             <li>Use <span className="font-medium text-foreground">Draw Route</span> before clicking the map to create route points.</li>
@@ -153,6 +173,7 @@ function RouteSetupPanel({ projects, projectSegments, segmentSessions, state, se
 
         <div className="flex gap-2">
           <Button className="flex-1" variant={state.isDrawing ? 'destructive' : 'default'} onClick={onToggleDrawing} disabled={!state.sessionId}>{state.isDrawing ? 'Stop Drawing' : 'Draw Route'}</Button>
+          <Button variant="outline" onClick={onUndoLastPoint} disabled={!state.routePoints.length}><Undo2 className="w-4 h-4" /></Button>
           <Button variant="outline" onClick={() => setState((current) => ({ ...current, routePoints: [], warning: '' }))} disabled={!state.routePoints.length}><Trash2 className="w-4 h-4" /></Button>
         </div>
         <Button className="w-full gap-2" onClick={onSave} disabled={!state.sessionId || validationWarnings.length > 0}><Save className="w-4 h-4" /> Save Route</Button>
@@ -205,12 +226,13 @@ function RouteSummaryCards({ routeSummary, validationWarnings, selectedProject, 
     </div>
   );
 }
-function CheckpointBuilder({ checkpoints, setCheckpoints, addingCheckpoint, setAddingCheckpoint, newCheckpoint, setNewCheckpoint, selectedSessionId, updateCheckpointMut, deleteCheckpointMut, moveCheckpoint, onDragEnd }) {
+function CheckpointBuilder({ checkpoints, setCheckpoints, addingCheckpoint, setAddingCheckpoint, newCheckpoint, setNewCheckpoint, selectedSessionId, updateCheckpointMut, deleteCheckpointMut, moveCheckpoint, onDragEnd, routeSuggestion }) {
   return (
     <Card>
       <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0"><CardTitle className="text-base">Checkpoint Operations</CardTitle><Button size="sm" variant="outline" onClick={() => setAddingCheckpoint((value) => !value)} disabled={!selectedSessionId}><Plus className="w-4 h-4 mr-1" /> Add checkpoint</Button></CardHeader>
       <CardContent className="space-y-4">
         <div className="rounded-xl border bg-muted/20 p-4">
+          {routeSuggestion && <p className="mb-2 text-sm text-foreground"><span className="font-semibold">Suggested route pattern:</span> {routeSuggestion}</p>}
           <p className="mb-2 text-sm font-semibold">Checkpoint operator guidance</p>
           <p className="text-sm leading-6 text-muted-foreground">Keep checkpoints in travel order, use clear operational labels, and mark only truly client-useful references as visible. Reorder when field traversal changes, rename inline when wording improves, and delete only if the checkpoint should no longer drive review or marker context.</p>
         </div>
@@ -297,6 +319,7 @@ export default function RouteEditor() {
   const [routeState, setRouteState] = useState(EMPTY_ROUTE_STATE);
   const [addingCheckpoint, setAddingCheckpoint] = useState(false);
   const [newCheckpoint, setNewCheckpoint] = useState(DEFAULT_CHECKPOINT);
+  const [focusedSearchPoint, setFocusedSearchPoint] = useState(null);
   const queryClient = useQueryClient();
   const { data: instructions = [] } = usePageInstructions('route_editor');
 
@@ -313,6 +336,14 @@ export default function RouteEditor() {
   const selectedSession = useMemo(() => sessions.find((session) => session.id === routeState.sessionId), [sessions, routeState.sessionId]);
   const routeSummary = useMemo(() => getRoutePathSummary(routeState.routePoints, routeState.checkpoints), [routeState.routePoints, routeState.checkpoints]);
   const syncEnvelope = useMemo(() => buildRouteMediaSyncEnvelope({ route: routes[0], checkpoints: routeState.checkpoints, session: selectedSession }), [routes, routeState.checkpoints, selectedSession]);
+  const routeSuggestion = useMemo(() => {
+    const viewType = selectedSession?.view_type;
+    if (viewType === 'cross_section') return 'Use the center line or center crossing path for this route.';
+    if (selectedSession?.session_name?.toLowerCase().includes('right')) return 'Bias the route to the right side of travel so the right profile stays consistent.';
+    if (selectedSession?.session_name?.toLowerCase().includes('left')) return 'Bias the route to the left side of travel so the left profile stays consistent.';
+    if (viewType === 'curb_line_edge_of_pavement') return 'Follow the curb line or pavement edge instead of the lane center.';
+    return 'Build the route in the same order the field crew should physically travel it.';
+  }, [selectedSession]);
 
   const validationWarnings = useMemo(() => getRouteValidationWarnings({
     projectId: routeState.projectId,
@@ -425,6 +456,16 @@ export default function RouteEditor() {
     }));
   };
 
+
+  const searchLocation = async () => {
+    if (!routeState.searchQuery) return;
+    const response = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&q=${encodeURIComponent(routeState.searchQuery)}`);
+    const results = await response.json();
+    const first = results?.[0];
+    setRouteState((current) => ({ ...current, searchResults: results, warning: first ? '' : 'No matching location found.' }));
+    if (first) setFocusedSearchPoint({ lat: Number(first.lat), lng: Number(first.lon) });
+  };
+
   const moveCheckpoint = async (index, direction) => {
     const next = [...routeState.checkpoints];
     const swapIndex = index + direction;
@@ -449,29 +490,8 @@ export default function RouteEditor() {
     <div className="space-y-6">
       <PageHeader title="Route Editor" description="Build, validate, and maintain route paths that link segment geography, capture sessions, and downstream marker workflows." />
 
-      <DocumentationPageIntro
-        instructionCards={instructions}
-        header={{
-          title: 'Route Editor Operating Overview',
-          purpose: 'The Route Editor turns field intent into a structured route record that downstream event logging, marker review, and project readiness all depend on.',
-          role: 'Project administrators, route planners, and QA reviewers maintain route quality here. Documenters may reference the route, but internal staff should control structural edits.',
-          workflowSummary: 'Select project, segment, and session; draw or load the route; place checkpoints in traversal order; then save only when start/end integrity and visibility rules are clear.',
-          visibilityRules: 'Checkpoint visibility is intentional, not automatic. Client-visible checkpoints should support published interpretation, while staging cues and QA anchors remain internal-only.',
-          nextSteps: 'After route save, move into Field Session for live capture timing, then Marker Review for validation against media and checkpoints.'
-        }}
-        guide={{
-          title: 'Route Editor Operating Guide',
-          description: 'Use this page to define the physical travel path for a segment-specific capture session while preserving Base44 alignment and the current in-house route workflow.',
-          sections: [
-            { heading: 'Purpose', body: 'This screen is the operational source of truth for route geometry and checkpoint order. Later field timing, media review, and marker QA all depend on what is set here.' },
-            { heading: 'When To Use It', body: 'Use this page after project and segment setup but before or during field-session preparation. Revisit it whenever route order changes or checkpoint visibility needs QA correction.' },
-            { heading: 'How To Use The Drawing Workflow', body: ['First choose the project, segment, and field session in order so the route is scoped correctly.', 'Then either load a template or click Draw Route and place map points in actual travel order.', 'Turn drawing off, add checkpoints, and click directly on the map for each checkpoint location.', 'Reorder, rename, and visibility-check the checkpoint list until it mirrors the real route that field staff will follow.'] },
-            { heading: 'Required Fields', body: 'A valid route should include a session selection, at least two map points, a route name or template context, and both a start and end checkpoint.' },
-            { heading: 'Validation Warnings', body: 'Warnings on this page are operational, not decorative. Resolve them before handoff unless a reviewer has explicitly accepted the exception and documented why.' },
-            { heading: 'Future-ready Design', body: 'Keep checkpoint labels objective and route geometry accurate so future additions such as 360 viewer overlays, map-video sync, and AI-assisted tagging can reuse the same route spine.' },
-          ],
-        }}
-      />
+      <DocumentationPageIntro instructionCards={instructions} guide={{ title: PAGE_GUIDANCE.route_editor.title, sections: PAGE_GUIDANCE.route_editor.sections }} />
+      <NextStepPanel step={PAGE_GUIDANCE.route_editor.sections.nextStep} detail="Field crews will use checkpoint order directly, so make sure the saved route reflects the actual travel path." />
 
       <FutureReadyPanel
         title="Route-to-media sync readiness"
@@ -495,21 +515,23 @@ export default function RouteEditor() {
             <CardHeader className="pb-3"><CardTitle className="text-base">Interactive Route Map</CardTitle></CardHeader>
             <CardContent className="space-y-4 p-4">
               <div className="rounded-xl border bg-muted/20 p-4">
+          {routeSuggestion && <p className="mb-2 text-sm text-foreground"><span className="font-semibold">Suggested route pattern:</span> {routeSuggestion}</p>}
                 <p className="mb-2 text-sm font-semibold">Map operating instructions</p>
                 <p className="text-sm leading-6 text-muted-foreground">When drawing is active, every map click creates another route point. When checkpoint creation is open, clicking the map places the checkpoint at the selected location. Keep those two modes intentional so the route line and checkpoint stack stay clean.</p>
               </div>
               <div className="h-[560px] overflow-hidden rounded-xl border">
-                <MapContainer center={[34.0522, -118.2437]} zoom={14} className="h-full w-full" scrollWheelZoom>
+                <MapContainer center={[34.0522, -118.2437]} zoom={14} minZoom={3} maxZoom={21} className="h-full w-full" scrollWheelZoom>
+                  <MapViewportController focusPoint={focusedSearchPoint} />
                   <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
                   <MapClickHandler onMapClick={handleMapClick} />
                   {routeState.routePoints.length > 1 && <Polyline positions={routeState.routePoints} color="#2563eb" weight={4} />}
                   {routeState.routePoints.map((point, index) => (
-                    <Marker key={`route-point-${index}`} position={[point.lat, point.lng]}>
+                    <Marker key={`route-point-${index}`} position={[point.lat, point.lng]} draggable eventHandlers={{ dragend: (event) => { const nextLatLng = event.target.getLatLng(); setRouteState((current) => ({ ...current, routePoints: current.routePoints.map((item, itemIndex) => itemIndex === index ? { lat: nextLatLng.lat, lng: nextLatLng.lng } : item) })); } }}>
                       <Popup>Route point {index + 1}</Popup>
                     </Marker>
                   ))}
                   {routeState.checkpoints.filter((checkpoint) => checkpoint.map_latitude && checkpoint.map_longitude).map((checkpoint, index) => (
-                    <Marker key={checkpoint.id || `checkpoint-${index}`} position={[checkpoint.map_latitude, checkpoint.map_longitude]}>
+                    <Marker key={checkpoint.id || `checkpoint-${index}`} position={[checkpoint.map_latitude, checkpoint.map_longitude]} draggable eventHandlers={{ dragend: (event) => { const nextLatLng = event.target.getLatLng(); setRouteState((current) => ({ ...current, checkpoints: current.checkpoints.map((item, itemIndex) => itemIndex === index ? { ...item, map_latitude: nextLatLng.lat, map_longitude: nextLatLng.lng } : item) })); if (checkpoint.id && !String(checkpoint.id).startsWith('template-')) updateCheckpointMut.mutate({ checkpointId: checkpoint.id, data: { map_latitude: nextLatLng.lat, map_longitude: nextLatLng.lng } }); } }}>
                       <Popup>{checkpoint.checkpoint_label}</Popup>
                     </Marker>
                   ))}
@@ -548,8 +570,11 @@ export default function RouteEditor() {
             selectedSession={selectedSession}
             onApplyTemplate={applyTemplate}
             onToggleDrawing={() => setRouteState((current) => ({ ...current, isDrawing: !current.isDrawing }))}
+            onSearchLocation={searchLocation}
+            onUndoLastPoint={() => setRouteState((current) => ({ ...current, routePoints: current.routePoints.slice(0, -1) }))}
             onSave={() => saveRouteMut.mutate()}
             validationWarnings={validationWarnings}
+            routeSuggestion={routeSuggestion}
           />
 
           <CheckpointBuilder
@@ -564,6 +589,7 @@ export default function RouteEditor() {
             deleteCheckpointMut={deleteCheckpointMut}
             moveCheckpoint={moveCheckpoint}
             onDragEnd={onDragEnd}
+            routeSuggestion={routeSuggestion}
           />
 
           <Card>

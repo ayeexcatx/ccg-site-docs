@@ -1,3 +1,6 @@
+
+import { CAPTURE_SESSION_STATUSES } from '@/lib/sessionWorkflow';
+
 // Status badge color mapping
 export const STATUS_COLORS = {
   // Project status
@@ -13,11 +16,7 @@ export const STATUS_COLORS = {
   uploaded: 'bg-purple-100 text-purple-800',
   reviewed: 'bg-teal-100 text-teal-800',
   // Session status
-  planned: 'bg-muted text-muted-foreground',
-  ready: 'bg-blue-100 text-blue-800',
-  paused: 'bg-amber-100 text-amber-800',
-  under_review: 'bg-purple-100 text-purple-800',
-  approved: 'bg-emerald-100 text-emerald-800',
+  ...Object.fromEntries(CAPTURE_SESSION_STATUSES.map((status) => [status.value, status.color])),
   // QA status
   not_reviewed: 'bg-muted text-muted-foreground',
   needs_review: 'bg-amber-100 text-amber-800',
