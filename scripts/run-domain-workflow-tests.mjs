@@ -8,8 +8,13 @@ async function loadDomainWorkflowModule() {
   const sourcePath = new URL('../src/lib/domainWorkflows.js', import.meta.url);
   const source = await readFile(sourcePath, 'utf8');
   const displayUtilsUrl = new URL('../src/lib/displayUtils.js', import.meta.url).href;
-  const rewritten = source.replace("@/lib/displayUtils", displayUtilsUrl);
+  const sessionWorkflowUrl = new URL('../src/lib/sessionWorkflow.js', import.meta.url).href;
+  const displayUtilsSource = await readFile(new URL('../src/lib/displayUtils.js', import.meta.url), 'utf8');
+  const rewrittenDisplayUtils = displayUtilsSource.replace("@/lib/sessionWorkflow", sessionWorkflowUrl);
   const tempDir = await mkdtemp(join(tmpdir(), 'ccg-domain-tests-'));
+  const displayUtilsTempFile = join(tempDir, 'displayUtils.testable.mjs');
+  await writeFile(displayUtilsTempFile, rewrittenDisplayUtils);
+  const rewritten = source.replace("@/lib/displayUtils", pathToFileURL(displayUtilsTempFile).href);
   const tempFile = join(tempDir, 'domainWorkflows.testable.mjs');
   await writeFile(tempFile, rewritten);
   const module = await import(pathToFileURL(tempFile).href);
@@ -35,6 +40,15 @@ try {
   assert.equal(routeSummary.startLabel, 'Start');
   assert.equal(routeSummary.endLabel, 'End');
 
+  const autoAnchors = workflows.ensureRouteCheckpointDefaults(
+    [{ lat: 10, lng: 20 }, { lat: 11, lng: 21 }, { lat: 12, lng: 22 }],
+    [{ id: 'mid-1', checkpoint_label: 'Mid', checkpoint_type: 'intersection', sequence_order: 0, map_latitude: 11, map_longitude: 21 }],
+  );
+  assert.equal(autoAnchors[0].checkpoint_type, 'start');
+  assert.equal(autoAnchors[0].map_latitude, 10);
+  assert.equal(autoAnchors[2].checkpoint_type, 'end');
+  assert.equal(autoAnchors[2].map_longitude, 22);
+
   const readinessBlocked = workflows.getProjectReadinessSummary({
     project: { include_photos: true, include_standard_video: true, client_visible_notes: 'Draft portal text' },
     segments: [{ id: 'seg-1' }],
@@ -44,9 +58,9 @@ try {
     routes: [{ id: 'r1', street_segment_id: 'seg-1' }],
   });
   assert.equal(readinessBlocked.publishReadiness, false);
-  assert.ok(readinessBlocked.blockers.some((item) => item.includes('Required view types present')));
-  assert.ok(readinessBlocked.blockers.some((item) => item.includes('Markers reviewed')));
-  assert.ok(readinessBlocked.blockers.some((item) => item.includes('Client-visible notes validated')));
+  assert.ok(readinessBlocked.blockers.some((item) => item.includes('Required views are complete')));
+  assert.ok(readinessBlocked.blockers.some((item) => item.includes('Reviewed markers support client context')));
+  assert.ok(readinessBlocked.blockers.some((item) => item.includes('Client-visible notes are validated')));
 
   const fieldSummary = workflows.getFieldSessionSummary({
     checkpoints: [
@@ -64,6 +78,22 @@ try {
   assert.equal(fieldSummary.groupedEvents.checkpoints.length, 1);
   assert.equal(fieldSummary.groupedEvents.notes.length, 1);
   assert.equal(fieldSummary.estimatedTimeline[1].estimated_timestamp_seconds, 10);
+
+  const gpsSummary = workflows.getGpsTrackingSessionSummary({
+    sessionId: 'sess-1',
+    routePoints: [{ lat: 34, lng: -118 }, { lat: 34.0005, lng: -118.0005 }, { lat: 34.001, lng: -118.001 }],
+    checkpoints: [
+      { id: 'start', checkpoint_label: 'Start', checkpoint_type: 'start', sequence_order: 0, map_latitude: 34, map_longitude: -118 },
+      { id: 'end', checkpoint_label: 'End', checkpoint_type: 'end', sequence_order: 1, map_latitude: 34.001, map_longitude: -118.001 },
+    ],
+    gpsSamples: [
+      { field_session_reference: 'sess-1', timestamp: '2026-03-22T10:00:00.000Z', latitude: 34, longitude: -118, accuracy: 4 },
+      { field_session_reference: 'sess-1', timestamp: '2026-03-22T10:05:00.000Z', latitude: 34.001, longitude: -118.001, accuracy: 4 },
+    ],
+  });
+  assert.equal(gpsSummary.totalSamples, 2);
+  assert.equal(gpsSummary.checkpointMatches[0].confidence, 'high');
+  assert.equal(gpsSummary.suggestedCutPoints[0].confidence, 'high');
 
   const markerSummary = workflows.getMarkerReviewSummary({
     markers: [
@@ -103,11 +133,11 @@ try {
       { id: 'seg-hidden', internal_notes: 'internal only' },
     ],
     media: [
-      { id: 'media-visible', publish_to_client: true, internal_notes: 'internal', street_segment_id: 'seg-visible' },
+      { id: 'media-visible', publish_to_client: true, internal_notes: 'internal', street_segment_id: 'seg-visible', preview_url: 'preview.mp4', thumbnail_url: 'thumb.jpg', publish_readiness: 'ready_for_publish' },
       { id: 'media-hidden', publish_to_client: false, internal_notes: 'still internal' },
     ],
     markers: [
-      { id: 'marker-visible', media_file_id: 'media-visible', is_client_visible: true, internal_notes: 'internal' },
+      { id: 'marker-visible', media_file_id: 'media-visible', is_client_visible: true, internal_notes: 'internal', confidence_level: 'confirmed' },
       { id: 'marker-hidden', media_file_id: 'media-hidden', is_client_visible: true, internal_notes: 'internal' },
     ],
   });
@@ -119,8 +149,8 @@ try {
   const viewerModel = workflows.getClientProjectViewerModel({
     project: { id: 'p1' },
     segments: [{ id: 'seg-visible', street_name: 'Main St', client_visible_notes: 'Visible' }],
-    media: [{ id: 'media-visible', publish_to_client: true, street_segment_id: 'seg-visible', view_type: 'profile', media_title: 'Main walk' }],
-    markers: [{ id: 'marker-visible', media_file_id: 'media-visible', marker_label: 'Corner', is_client_visible: true, client_visible_notes: 'Approved marker' }],
+    media: [{ id: 'media-visible', publish_to_client: true, street_segment_id: 'seg-visible', view_type: 'profile', media_title: 'Main walk', preview_url: 'preview.mp4', thumbnail_url: 'thumb.jpg', publish_readiness: 'ready_for_publish' }],
+    markers: [{ id: 'marker-visible', media_file_id: 'media-visible', marker_label: 'Corner', is_client_visible: true, client_visible_notes: 'Approved marker', confidence_level: 'confirmed' }],
     search: 'main',
     selectedSegmentId: 'seg-visible',
     selectedViewType: 'profile',

@@ -1,5 +1,5 @@
 import { base44 } from '@/api/base44Client';
-import { getFieldSessionSummary, getProjectReadinessSummary, orderCheckpoints } from '@/lib/domainWorkflows';
+import { ensureRouteCheckpointDefaults, getFieldSessionSummary, getProjectReadinessSummary, orderCheckpoints } from '@/lib/domainWorkflows';
 
 const safeList = async (entityName, sort = '-created_date', limit = 200) => {
   try {
@@ -22,6 +22,7 @@ export async function createCaptureSessionForSegment({ projectId, streetSegmentI
 }
 
 export async function saveDrawnRoutePath({ existingRouteId, session, routeName, routePoints, checkpoints = [], templateName = '' }) {
+  const normalizedCheckpoints = ensureRouteCheckpointDefaults(routePoints, checkpoints);
   const routeData = {
     project_id: session?.project_id || '',
     street_segment_id: session?.street_segment_id || '',
@@ -33,7 +34,7 @@ export async function saveDrawnRoutePath({ existingRouteId, session, routeName, 
     start_longitude: routePoints?.[0]?.lng,
     end_latitude: routePoints?.[routePoints.length - 1]?.lat,
     end_longitude: routePoints?.[routePoints.length - 1]?.lng,
-    has_checkpoints: checkpoints.length > 0,
+    has_checkpoints: normalizedCheckpoints.length > 0,
   };
 
   if (existingRouteId) {
@@ -41,6 +42,45 @@ export async function saveDrawnRoutePath({ existingRouteId, session, routeName, 
   }
 
   return base44.entities.RoutePath.create(routeData);
+}
+
+export async function syncRouteCheckpoints({ session, routePathId, routePoints = [], checkpoints = [], existingCheckpoints = [] }) {
+  const normalizedCheckpoints = ensureRouteCheckpointDefaults(routePoints, checkpoints);
+  const existingById = new Map(existingCheckpoints.filter((checkpoint) => checkpoint.id).map((checkpoint) => [checkpoint.id, checkpoint]));
+  const nextIds = new Set(normalizedCheckpoints.map((checkpoint) => checkpoint.id).filter(Boolean));
+
+  // Route save/reload reliability depends on checkpoint records matching the saved geometry.
+  // Persist start/end defaults alongside manual checkpoints so the same project/segment/session
+  // combination always reconstructs the same ordered route context on reload.
+  await Promise.all(
+    normalizedCheckpoints.map((checkpoint, index) => {
+      const payload = {
+        project_id: session?.project_id || checkpoint.project_id || '',
+        street_segment_id: session?.street_segment_id || checkpoint.street_segment_id || '',
+        capture_session_id: session?.id || checkpoint.capture_session_id || '',
+        route_path_id: routePathId || checkpoint.route_path_id || '',
+        checkpoint_type: checkpoint.checkpoint_type,
+        checkpoint_label: checkpoint.checkpoint_label,
+        sequence_order: index,
+        map_latitude: checkpoint.map_latitude,
+        map_longitude: checkpoint.map_longitude,
+        is_client_visible: checkpoint.is_client_visible ?? true,
+        internal_notes: checkpoint.internal_notes || '',
+        checkpoint_reference: checkpoint.checkpoint_reference || '',
+      };
+
+      if (checkpoint.id && existingById.has(checkpoint.id)) {
+        return base44.entities.RouteCheckpoint.update(checkpoint.id, payload);
+      }
+
+      return base44.entities.RouteCheckpoint.create(payload);
+    })
+  );
+
+  const removedCheckpoints = existingCheckpoints.filter((checkpoint) => checkpoint.id && !nextIds.has(checkpoint.id));
+  await Promise.all(removedCheckpoints.map((checkpoint) => base44.entities.RouteCheckpoint.delete(checkpoint.id)));
+
+  return normalizedCheckpoints;
 }
 
 export async function addRouteCheckpoint({ session, routePathId, checkpoint, sequenceOrder }) {
