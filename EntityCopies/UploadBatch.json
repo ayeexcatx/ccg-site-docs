@@ -8,6 +8,9 @@
     "capture_session_id": {
       "type": "string"
     },
+    "gps_track_id": {
+      "type": "string"
+    },
     "batch_name": {
       "type": "string"
     },
@@ -19,12 +22,24 @@
       "enum": [
         "pending",
         "uploaded",
+        "needs_track",
         "needs_mapping",
         "needs_review",
         "complete",
         "error"
       ],
       "default": "pending"
+    },
+    "track_ingest_status": {
+      "type": "string",
+      "enum": [
+        "not_started",
+        "uploaded",
+        "parsed",
+        "needs_review",
+        "error"
+      ],
+      "default": "not_started"
     },
     "total_files": {
       "type": "number",

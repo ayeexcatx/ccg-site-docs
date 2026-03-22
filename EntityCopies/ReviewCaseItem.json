@@ -8,13 +8,13 @@
     "media_file_id": {
       "type": "string"
     },
-    "media_marker_id": {
+    "timeline_index_entry_id": {
       "type": "string"
     },
-    "asset_location_id": {
+    "suggested_cut_point_id": {
       "type": "string"
     },
-    "route_checkpoint_id": {
+    "session_sync_id": {
       "type": "string"
     },
     "note": {

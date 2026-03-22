@@ -2,24 +2,88 @@
   "name": "CaptureSessionEntry",
   "type": "object",
   "properties": {
-    "project_id": { "type": "string" },
-    "capture_session_id": { "type": "string" },
+    "project_id": {
+      "type": "string"
+    },
     "entry_type": {
       "type": "string",
-      "enum": ["note", "observation", "gps_pairing", "issue", "milestone"],
-      "default": "note"
+      "enum": [
+        "roadway",
+        "range",
+        "frontage",
+        "intersection",
+        "custom"
+      ],
+      "default": "roadway"
     },
-    "title": { "type": "string" },
-    "entry_text": { "type": "string" },
-    "captured_at": { "type": "string" },
-    "timeline_label": { "type": "string" },
-    "gps_source": {
-      "type": "string",
-      "enum": ["manual", "gpx", "fit", "device_live", "derived"],
-      "default": "manual"
+    "entry_name": {
+      "type": "string"
     },
-    "latitude": { "type": "number" },
-    "longitude": { "type": "number" }
+    "street_name": {
+      "type": "string"
+    },
+    "from_location": {
+      "type": "string"
+    },
+    "to_location": {
+      "type": "string"
+    },
+    "address_range_start": {
+      "type": "string"
+    },
+    "address_range_end": {
+      "type": "string"
+    },
+    "municipality": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "include_right_profile": {
+      "type": "boolean",
+      "default": true
+    },
+    "include_left_profile": {
+      "type": "boolean",
+      "default": false
+    },
+    "include_curb_line": {
+      "type": "boolean",
+      "default": false
+    },
+    "include_cross_section": {
+      "type": "boolean",
+      "default": false
+    },
+    "include_360_walk": {
+      "type": "boolean",
+      "default": false
+    },
+    "recording_order": {
+      "type": "number",
+      "default": 0
+    },
+    "active": {
+      "type": "boolean",
+      "default": true
+    },
+    "created_by": {
+      "type": "string"
+    },
+    "updated_by": {
+      "type": "string"
+    },
+    "created_date": {
+      "type": "string"
+    },
+    "updated_date": {
+      "type": "string"
+    }
   },
-  "required": ["capture_session_id", "title"]
+  "required": [
+    "project_id",
+    "entry_type",
+    "entry_name"
+  ]
 }

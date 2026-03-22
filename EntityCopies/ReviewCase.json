@@ -2,23 +2,65 @@
   "name": "ReviewCase",
   "type": "object",
   "properties": {
-    "project_id": { "type": "string" },
-    "client_organization_id": { "type": "string" },
-    "case_title": { "type": "string" },
+    "project_id": {
+      "type": "string"
+    },
+    "client_organization_id": {
+      "type": "string"
+    },
+    "capture_session_id": {
+      "type": "string"
+    },
+    "media_file_id": {
+      "type": "string"
+    },
+    "gps_track_id": {
+      "type": "string"
+    },
+    "timeline_index_entry_id": {
+      "type": "string"
+    },
+    "case_title": {
+      "type": "string"
+    },
     "case_type": {
       "type": "string",
-      "enum": ["claim_review", "internal_review", "qa_review", "client_question", "export_request"],
+      "enum": [
+        "claim_review",
+        "internal_review",
+        "qa_review",
+        "client_question",
+        "export_request",
+        "sync_review",
+        "timeline_review"
+      ],
       "default": "client_question"
     },
     "status": {
       "type": "string",
-      "enum": ["open", "in_progress", "resolved", "closed"],
+      "enum": [
+        "open",
+        "in_progress",
+        "resolved",
+        "closed"
+      ],
       "default": "open"
     },
-    "submitted_by_user_id": { "type": "string" },
-    "summary": { "type": "string" },
-    "internal_notes": { "type": "string" },
-    "client_visible_notes": { "type": "string" }
+    "submitted_by_user_id": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "internal_notes": {
+      "type": "string"
+    },
+    "client_visible_notes": {
+      "type": "string"
+    }
   },
-  "required": ["case_title", "case_type"]
+  "required": [
+    "case_title",
+    "case_type"
+  ]
 }

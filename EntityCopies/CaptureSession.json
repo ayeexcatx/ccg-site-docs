@@ -2,45 +2,139 @@
   "name": "CaptureSession",
   "type": "object",
   "properties": {
-    "project_id": { "type": "string" },
-    "session_name": { "type": "string" },
-    "session_code": { "type": "string" },
-    "assigned_documenter_id": { "type": "string" },
+    "project_id": {
+      "type": "string"
+    },
+    "capture_session_entry_id": {
+      "type": "string"
+    },
+    "session_name": {
+      "type": "string"
+    },
+    "session_code": {
+      "type": "string"
+    },
+    "assigned_documenter_id": {
+      "type": "string"
+    },
     "session_status": {
       "type": "string",
-      "enum": ["planned", "ready", "in_progress", "paused", "uploaded", "processing", "under_review", "approved", "published"],
+      "enum": [
+        "planned",
+        "ready",
+        "in_progress",
+        "paused",
+        "uploaded",
+        "sync_pending",
+        "processing",
+        "under_review",
+        "approved",
+        "published"
+      ],
       "default": "planned"
     },
-    "capture_date": { "type": "string", "format": "date" },
-    "planned_start_time": { "type": "string" },
-    "actual_start_time": { "type": "string" },
-    "actual_end_time": { "type": "string" },
+    "capture_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "planned_start_time": {
+      "type": "string"
+    },
+    "actual_start_time": {
+      "type": "string"
+    },
+    "actual_end_time": {
+      "type": "string"
+    },
     "capture_method": {
       "type": "string",
-      "enum": ["photo", "video", "video_and_photo", "video_360", "mixed"],
+      "enum": [
+        "photo",
+        "video",
+        "video_and_photo",
+        "video_360",
+        "mixed"
+      ],
       "default": "video"
     },
-    "view_type": {
+    "default_view_type": {
       "type": "string",
-      "enum": ["profile", "curb_line_edge_of_pavement", "cross_section", "360_walk", "reverse_view", "custom"],
-      "default": "profile"
+      "enum": [
+        "right_profile",
+        "left_profile",
+        "curb_line_edge_of_pavement",
+        "cross_section",
+        "360_walk",
+        "reverse_view",
+        "custom"
+      ],
+      "default": "right_profile"
     },
-    "walking_direction_description": { "type": "string" },
-    "session_area_description": { "type": "string" },
-    "weather_notes": { "type": "string" },
-    "field_notes_internal": { "type": "string" },
-    "field_notes_client_visible": { "type": "string" },
-    "gps_track_expected": { "type": "boolean", "default": false },
+    "recording_order": {
+      "type": "number",
+      "default": 0
+    },
+    "session_area_description": {
+      "type": "string"
+    },
+    "weather_notes": {
+      "type": "string"
+    },
+    "field_notes_internal": {
+      "type": "string"
+    },
+    "field_notes_client_visible": {
+      "type": "string"
+    },
+    "gps_track_expected": {
+      "type": "boolean",
+      "default": true
+    },
+    "gps_sync_status": {
+      "type": "string",
+      "enum": [
+        "not_started",
+        "pending",
+        "synced",
+        "needs_review"
+      ],
+      "default": "not_started"
+    },
     "timeline_index_status": {
       "type": "string",
-      "enum": ["not_started", "in_progress", "indexed", "needs_review"],
+      "enum": [
+        "not_started",
+        "in_progress",
+        "indexed",
+        "needs_review"
+      ],
       "default": "not_started"
     },
     "qa_status": {
       "type": "string",
-      "enum": ["not_reviewed", "needs_review", "approved", "flagged"],
+      "enum": [
+        "not_reviewed",
+        "needs_review",
+        "approved",
+        "flagged"
+      ],
       "default": "not_reviewed"
+    },
+    "created_by": {
+      "type": "string"
+    },
+    "updated_by": {
+      "type": "string"
+    },
+    "created_date": {
+      "type": "string"
+    },
+    "updated_date": {
+      "type": "string"
     }
   },
-  "required": ["project_id", "session_name"]
+  "required": [
+    "project_id",
+    "session_name"
+  ]
 }

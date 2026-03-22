@@ -1,0 +1,61 @@
+{
+  "name": "SessionSync",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string"
+    },
+    "capture_session_id": {
+      "type": "string"
+    },
+    "media_file_id": {
+      "type": "string"
+    },
+    "gps_track_id": {
+      "type": "string"
+    },
+    "sync_mode": {
+      "type": "string",
+      "enum": [
+        "manual_offset",
+        "timecode",
+        "device_clock",
+        "hybrid"
+      ],
+      "default": "manual_offset"
+    },
+    "video_start_time": {
+      "type": "string"
+    },
+    "gps_start_time": {
+      "type": "string"
+    },
+    "offset_seconds": {
+      "type": "number"
+    },
+    "sync_confidence": {
+      "type": "number"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "created_by": {
+      "type": "string"
+    },
+    "updated_by": {
+      "type": "string"
+    },
+    "created_date": {
+      "type": "string"
+    },
+    "updated_date": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id",
+    "capture_session_id",
+    "media_file_id",
+    "gps_track_id"
+  ]
+}

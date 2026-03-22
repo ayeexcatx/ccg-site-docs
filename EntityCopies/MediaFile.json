@@ -2,73 +2,187 @@
   "name": "MediaFile",
   "type": "object",
   "properties": {
-    "project_id": { "type": "string" },
-    "capture_session_id": { "type": "string" },
-    "upload_batch_id": { "type": "string" },
-    "gps_track_id": { "type": "string" },
+    "project_id": {
+      "type": "string"
+    },
+    "capture_session_id": {
+      "type": "string"
+    },
+    "upload_batch_id": {
+      "type": "string"
+    },
+    "gps_track_id": {
+      "type": "string"
+    },
+    "session_sync_id": {
+      "type": "string"
+    },
     "media_type": {
       "type": "string",
-      "enum": ["photo", "video", "video_360", "thumbnail", "preview_clip", "document", "export"],
+      "enum": [
+        "photo",
+        "video",
+        "video_360",
+        "thumbnail",
+        "preview_clip",
+        "document",
+        "export"
+      ],
       "default": "video"
     },
-    "media_title": { "type": "string" },
-    "media_title_override_for_client": { "type": "string" },
-    "original_filename": { "type": "string" },
+    "media_title": {
+      "type": "string"
+    },
+    "media_title_override_for_client": {
+      "type": "string"
+    },
+    "original_filename": {
+      "type": "string"
+    },
     "source_kind": {
       "type": "string",
-      "enum": ["native_upload", "external_link"],
+      "enum": [
+        "native_upload",
+        "external_link",
+        "synced_import"
+      ],
       "default": "native_upload"
     },
     "storage_mode": {
       "type": "string",
-      "enum": ["native_upload", "external_link", "future_connector_storage"],
+      "enum": [
+        "native_upload",
+        "external_link",
+        "future_connector_storage"
+      ],
       "default": "native_upload"
     },
-    "file_url": { "type": "string" },
-    "original_file_url": { "type": "string" },
-    "preview_url": { "type": "string" },
+    "file_url": {
+      "type": "string"
+    },
+    "original_file_url": {
+      "type": "string"
+    },
+    "preview_url": {
+      "type": "string"
+    },
     "preview_status": {
       "type": "string",
-      "enum": ["missing", "queued", "ready", "error"],
+      "enum": [
+        "missing",
+        "queued",
+        "ready",
+        "error"
+      ],
       "default": "missing"
     },
-    "thumbnail_url": { "type": "string" },
+    "thumbnail_url": {
+      "type": "string"
+    },
     "thumbnail_status": {
       "type": "string",
-      "enum": ["missing", "queued", "ready", "error"],
+      "enum": [
+        "missing",
+        "queued",
+        "ready",
+        "error"
+      ],
       "default": "missing"
     },
-    "mime_type": { "type": "string" },
-    "duration_seconds": { "type": "number" },
-    "file_size_bytes": { "type": "number" },
-    "capture_datetime": { "type": "string" },
-    "upload_datetime": { "type": "string" },
-    "uploaded_by": { "type": "string" },
+    "mime_type": {
+      "type": "string"
+    },
+    "duration_seconds": {
+      "type": "number"
+    },
+    "file_size_bytes": {
+      "type": "number"
+    },
+    "capture_datetime": {
+      "type": "string"
+    },
+    "upload_datetime": {
+      "type": "string"
+    },
+    "uploaded_by": {
+      "type": "string"
+    },
     "view_type": {
       "type": "string",
-      "enum": ["profile", "curb_line_edge_of_pavement", "cross_section", "360_walk", "reverse_view", "custom"],
-      "default": "profile"
+      "enum": [
+        "right_profile",
+        "left_profile",
+        "curb_line_edge_of_pavement",
+        "cross_section",
+        "360_walk",
+        "reverse_view",
+        "custom"
+      ],
+      "default": "right_profile"
     },
-    "direction_label": { "type": "string" },
-    "publish_to_client": { "type": "boolean", "default": false },
+    "direction_label": {
+      "type": "string"
+    },
+    "publish_to_client": {
+      "type": "boolean",
+      "default": false
+    },
     "publish_readiness": {
       "type": "string",
-      "enum": ["not_reviewed", "needs_preview", "needs_thumbnail", "qa_hold", "ready_for_publish", "published"],
+      "enum": [
+        "not_reviewed",
+        "needs_preview",
+        "needs_thumbnail",
+        "needs_sync",
+        "qa_hold",
+        "ready_for_publish",
+        "published"
+      ],
       "default": "not_reviewed"
     },
     "processing_status": {
       "type": "string",
-      "enum": ["uploaded", "processing", "ready", "error", "archived"],
+      "enum": [
+        "uploaded",
+        "processing",
+        "ready",
+        "error",
+        "archived"
+      ],
       "default": "uploaded"
     },
     "track_pairing_status": {
       "type": "string",
-      "enum": ["unpaired", "candidate_match", "paired", "needs_review"],
+      "enum": [
+        "unpaired",
+        "candidate_match",
+        "paired",
+        "needs_review"
+      ],
       "default": "unpaired"
     },
-    "pairing_notes": { "type": "string" },
-    "internal_notes": { "type": "string" },
-    "client_visible_notes": { "type": "string" }
+    "timeline_index_status": {
+      "type": "string",
+      "enum": [
+        "not_started",
+        "indexed",
+        "needs_review"
+      ],
+      "default": "not_started"
+    },
+    "pairing_notes": {
+      "type": "string"
+    },
+    "internal_notes": {
+      "type": "string"
+    },
+    "client_visible_notes": {
+      "type": "string"
+    }
   },
-  "required": ["project_id", "media_type", "media_title"]
+  "required": [
+    "project_id",
+    "media_type",
+    "media_title"
+  ]
 }

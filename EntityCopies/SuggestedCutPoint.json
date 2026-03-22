@@ -1,0 +1,50 @@
+{
+  "name": "SuggestedCutPoint",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string"
+    },
+    "capture_session_id": {
+      "type": "string"
+    },
+    "media_file_id": {
+      "type": "string"
+    },
+    "timestamp_seconds": {
+      "type": "number"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "related_location_label": {
+      "type": "string"
+    },
+    "confidence": {
+      "type": "number"
+    },
+    "accepted": {
+      "type": "boolean",
+      "default": false
+    },
+    "created_by": {
+      "type": "string"
+    },
+    "updated_by": {
+      "type": "string"
+    },
+    "created_date": {
+      "type": "string"
+    },
+    "updated_date": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id",
+    "capture_session_id",
+    "media_file_id",
+    "timestamp_seconds",
+    "reason"
+  ]
+}
