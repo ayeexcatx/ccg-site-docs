@@ -11,7 +11,7 @@ import VisibilityBadge, { VISIBILITY_EXPLANATIONS } from '@/components/ui/Visibi
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { OperatingGuide, QAReviewChecklist, VisibilityRulesPanel, WorkflowStepsPanel, InstructionPanel } from '@/components/ui/OperatingGuidance';
+import { DocumentationPageIntro, NextStepPanel, QAReviewChecklist, VisibilityRulesPanel, WorkflowStepsPanel, InstructionPanel } from '@/components/ui/OperatingGuidance';
 import { getClientProjectViewerModel, getProjectDetailSummary, getProjectPublishWarnings } from '@/lib/domainWorkflows';
 import { usePageInstructions } from '@/hooks/usePageInstructions';
 import { useUserProfile } from '@/lib/useUserProfile';
@@ -80,18 +80,8 @@ export default function ProjectDetail() {
         mistakesToAvoid="Do not publish because a project looks mostly complete. Missing route data, unreviewed markers, unsafe media, or draft client notes can leak confusion even when the package appears close to done."
       />
 
-      <OperatingGuide
-        title="Project Publishing and Handoff Guide"
-        description="Use this page to separate draft production data, internally reviewed deliverables, and the actual client-visible published package. Everything below should help staff decide whether the project is still being built, ready for internal sign-off, or genuinely safe to hand off to the client portal."
-        instructionCards={instructions}
-        sections={[
-          { heading: 'What publishing means', body: 'Publishing is the deliberate step that exposes the approved client package in the portal. It should happen only after required views, routes, sessions, notes, markers, and media safety checks all pass.' },
-          { heading: 'What becomes visible', body: 'Clients only receive approved project summaries, client-visible segment notes, publish-safe media, and confirmed markers tied to that published media.' },
-          { heading: 'What remains internal', body: 'Internal notes, QA notes, field-only commentary, route-building context, workflow blockers, expected-views metadata, and any non-publish-safe media stay hidden from client views.' },
-          { heading: 'What to review first', body: ['Confirm every scoped segment has route and session coverage.', 'Validate that each required view type has client-safe media coverage.', 'Clean client-visible notes so they do not include draft/internal wording.', 'Confirm markers shown to clients are reviewed and tied to safe published media.'] },
-          { heading: 'Mistakes to avoid', body: ['Do not confuse internally reviewed data with client-visible published data.', 'Do not publish media just because a file exists; it must also be preview-safe and thumbnail-safe where applicable.', 'Do not let client-visible notes mirror internal notes or QA language.', 'Do not assume missing client content was deleted; it may still be correctly blocked from publication.'] },
-        ]}
-      />
+      <DocumentationPageIntro instructionCards={instructions} guide={{ title: PAGE_GUIDANCE.project_detail.title, sections: PAGE_GUIDANCE.project_detail.sections }} />
+      <NextStepPanel step={PAGE_GUIDANCE.project_detail.sections.nextStep} detail="Use the blocker and preview sections together so the next move is obvious." />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {summaryCards.map((card) => (

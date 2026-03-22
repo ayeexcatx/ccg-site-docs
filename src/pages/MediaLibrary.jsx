@@ -2,7 +2,6 @@ import React, { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import PageHeader from '@/components/ui/PageHeader';
-import HowThisWorks from '@/components/ui/HowThisWorks';
 import StatusBadge from '@/components/ui/StatusBadge';
 import EmptyState from '@/components/ui/EmptyState';
 import FutureReadyPanel from '@/components/ui/FutureReadyPanel';
@@ -11,6 +10,7 @@ import {
   QAReviewChecklist,
   VisibilityRulesPanel,
   WorkflowStepsPanel,
+  NextStepPanel,
 } from '@/components/ui/OperatingGuidance';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -36,6 +36,7 @@ import {
   Video,
 } from 'lucide-react';
 import { VIEW_TYPE_LABELS } from '@/lib/constants';
+import { PAGE_GUIDANCE } from '@/lib/workflowGuidance';
 import { createViewerCapabilityMatrix, getStorageAdapterBlueprints, resolveStorageAdapter } from '@/lib/futureArchitecture';
 
 const MEDIA_TYPES = ['photo', 'video', 'video_360', 'thumbnail', 'preview_clip', 'document', 'export'];
@@ -143,6 +144,7 @@ export default function MediaLibrary() {
   const [form, setForm] = useState(emptyMedia);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
+  const [uploadMatcherInput, setUploadMatcherInput] = useState('');
   const queryClient = useQueryClient();
 
   const { data: mediaFiles = [], isLoading } = useQuery({
@@ -220,6 +222,14 @@ export default function MediaLibrary() {
     };
   }, [mediaFiles]);
 
+  const uploadMatchingSuggestions = useMemo(() => {
+    const filenames = uploadMatcherInput.split(/\n|,/).map((item) => item.trim()).filter(Boolean);
+    const orderedSessions = sessions
+      .filter((session) => session.street_segment_id === form.street_segment_id)
+      .sort((a, b) => (a.sequence_order ?? 0) - (b.sequence_order ?? 0));
+    return filenames.map((fileName, index) => ({ fileName, suggestedSession: orderedSessions[index] || null }));
+  }, [uploadMatcherInput, sessions, form.street_segment_id]);
+
   const selectedStorage = resolveStorageAdapter(form.storage_mode);
   const selectedViewer = createViewerCapabilityMatrix(form);
 
@@ -233,67 +243,28 @@ export default function MediaLibrary() {
         <Button size="sm" className="gap-2" onClick={() => { setForm(emptyMedia); setShowForm(true); }}><Plus className="w-4 h-4" /> Register Media</Button>
       </PageHeader>
 
-      <DocumentationPageIntro
-        header={{
-          title: 'Media operations guide',
-          purpose: 'This page is the master operating surface for creating media records, linking uploads to sessions and batches, and deciding which preview-safe assets may appear in client-facing views.',
-          role: 'Documentation managers, upload coordinators, QA reviewers, and admins responsible for release controls.',
-          workflowSummary: 'Create or register media, connect it to the correct project/segment/session/batch, verify preview and thumbnail derivatives, review readiness, then expose only approved client-safe media.',
-          visibilityRules: 'Original masters, internal notes, and operational storage details remain internal. Only explicitly publish-safe items should be exposed to clients, ideally by way of preview derivatives rather than original masters.',
-          nextSteps: 'Use the summary cards to find missing operational work, open a media record to inspect readiness, and only publish when processing, preview, thumbnail, and QA indicators are aligned.',
-        }}
-        guide={{
-          description: 'The Media Library should explain the production workflow directly in the UI so staff can make consistent operational decisions for standard files, long-form roadway videos, and future 360 media without needing external SOPs.',
-          sections: [
-            {
-              heading: 'When to use native upload',
-              body: [
-                'Use native upload for normal in-house managed media, especially review copies, thumbnails, still photos, short video clips, and project files that the current application can reliably host and inspect.',
-                'Native upload keeps operations simple because the file record, preview, thumbnail, publish flags, and QA workflow all stay in one internal path. This should remain the default unless the original asset is too large or must stay in a governed archive.',
-              ],
-            },
-            {
-              heading: 'When to register an external file',
-              body: [
-                'Register an external file when the operational record must exist in the portal, but the original master is too large, too long, or administratively required to live in an approved external repository or archive.',
-                'When using an external link, keep the record in-house-first by storing operational metadata here, providing a reliable preview or proxy asset for review, and documenting the storage label/path so admins can trace the authoritative original without exposing that location to clients.',
-              ],
-            },
-            {
-              heading: 'How previews relate to originals',
-              body: [
-                'Treat the original file as the preservation or source-quality record. Treat the preview as the staff review and client-safe derivative used for quick loading, browser playback, and controlled publishing.',
-                'Long-form videos and 360 media should generally have a lighter preview derivative and a thumbnail even if the original remains external. Missing previews should block client publishing unless leadership has approved an exception.',
-              ],
-            },
-            {
-              heading: 'Operational handling for long-form and 360 media',
-              body: [
-                'Long-form roadway videos often require separate handling because the original file size, ingest time, and review burden are larger than normal clips. Keep those records linked to upload batches, track processing state carefully, and publish from preview-safe derivatives rather than full-resolution masters.',
-                'Future 360 media should still be registered now with complete metadata. Mark the record clearly, maintain a preview workflow, and preserve enough information so an approved immersive viewer can be added later without remapping the media library.',
-              ],
-            },
-            {
-              heading: 'How to choose client-visible media',
-              body: [
-                'Client-visible media should be chosen intentionally from records that are QA-reviewed, have usable thumbnails, have publish-safe preview assets, and do not depend on fragile admin-only storage paths.',
-                'If a record is not ready for publish, leave it internal even if the original content is valuable. The client portal should prioritize stability, fast loading, and operational clarity over showing every available source file.',
-              ],
-            },
-          ],
-        }}
-      />
+      <DocumentationPageIntro guide={{ title: PAGE_GUIDANCE.media_library.title, sections: PAGE_GUIDANCE.media_library.sections }} />
+      <NextStepPanel step={PAGE_GUIDANCE.media_library.sections.nextStep} detail="Use the matching helper before QA starts so files are attached to the right ordered session from the beginning." />
 
-      <HowThisWorks
-        title="Media workflow quick guidance"
-        items={[
-          'Create a media record for every operationally relevant file, whether the bytes are uploaded natively or registered from an approved external location.',
-          'Link every record to the correct project, segment, capture session, and upload batch whenever possible so long-form and repeat captures stay traceable.',
-          'Store original file details separately from previews and thumbnails. The original is the master; the preview is the review-safe and publish-safe derivative.',
-          'Use long-form and 360 flags to make future workflow routing explicit now, even before a dedicated storage connector or immersive viewer exists.',
-          'Do not publish client-visible media until processing, preview, thumbnail, and QA indicators all support a stable external experience.',
-        ]}
-      />
+      <div className="grid gap-4 md:grid-cols-2">
+        <SummaryAlertList title="Workflow helper summary" icon={AlertTriangle} items={[
+          { id: 'native-vs-external', title: 'Native upload vs external link', description: 'Use native upload for normal in-house files. Use external link when the original must stay in another governed storage location.', badges: ['Native = managed here', 'External = managed elsewhere'] },
+          { id: 'preview-vs-original', title: 'Preview vs original', description: 'Preview and thumbnail assets are for review and publish-safe access. Original file links are the master source and may stay internal.', badges: ['Preview-safe', 'Original master'] },
+        ]} emptyMessage="No media workflow helper items." />
+        <Card>
+          <CardHeader><CardTitle className="text-base">Upload matching helper</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <Label>Paste uploaded filenames in order</Label>
+            <Textarea value={uploadMatcherInput} onChange={(event) => setUploadMatcherInput(event.target.value)} placeholder={`segment-right.mp4
+segment-left.mp4
+segment-curb.mp4`} className="min-h-24" />
+            <p className="text-xs text-muted-foreground">The helper uses the selected segment in the form and its ordered sessions to suggest file 1 → session 1, file 2 → session 2, and so on. You can still override manually in the media record.</p>
+            <div className="space-y-2">
+              {uploadMatchingSuggestions.length === 0 ? <p className="text-sm text-muted-foreground">Add filenames and choose a segment in the form to see matching suggestions.</p> : uploadMatchingSuggestions.map((item, index) => <div key={`${item.fileName}-${index}`} className="rounded-lg border p-3 text-sm"><p className="font-medium">File {index + 1}: {item.fileName}</p><p className="text-muted-foreground">Suggested session: {item.suggestedSession?.session_name || 'No matching session available yet'}</p></div>)}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <SummaryStatCard icon={Video} title="Long-form video records" value={summary.longFormCount} description="Records marked as long-form or exceeding 20 minutes. Review these for preview derivatives, batch traceability, and storage strategy." />

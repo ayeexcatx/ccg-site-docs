@@ -10,6 +10,8 @@ import StatusBadge from '@/components/ui/StatusBadge';
 import PermissionNotice from '@/components/ui/PermissionNotice';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { DocumentationPageIntro, NextStepPanel } from '@/components/ui/OperatingGuidance';
+import { PAGE_GUIDANCE } from '@/lib/workflowGuidance';
 import { FolderOpen, FileVideo, MessageSquare, MapPin, Plus, ArrowRight, Camera, BookmarkCheck } from 'lucide-react';
 
 export default function Dashboard() {
@@ -44,7 +46,7 @@ export default function Dashboard() {
   }
 
   const widgets = [
-    { title: 'Sessions ready for field', value: sessions.filter((s) => ['planned', 'ready'].includes(s.session_status)).length, icon: Camera, subtitle: isDocumenter ? 'Assigned to you or your scoped projects' : 'Upcoming operational work' },
+    { title: 'Sessions ready for field', value: sessions.filter((s) => ['planning', 'ready_for_documentation'].includes(s.session_status)).length, icon: Camera, subtitle: isDocumenter ? 'Assigned to you or your scoped projects' : 'Upcoming operational work' },
     { title: 'Uploads needing mapping', value: mediaFiles.filter((m) => !m.street_segment_id || !m.capture_session_id).length, icon: FileVideo, subtitle: 'Media metadata needs project context' },
     { title: 'Markers needing confirmation', value: markers.filter((m) => m.confidence_level !== 'confirmed').length, icon: BookmarkCheck, subtitle: 'Keep internal-only until confirmed' },
     { title: 'Review cases needing response', value: reviewCases.filter((r) => ['open', 'in_progress'].includes(r.status)).length, icon: MessageSquare, subtitle: 'Outstanding review workload' },
@@ -61,6 +63,9 @@ export default function Dashboard() {
       >
         {!isDocumenter && <Link to="/projects"><Button size="sm" className="gap-2"><Plus className="w-4 h-4" /> New Project</Button></Link>}
       </PageHeader>
+
+      <DocumentationPageIntro guide={{ title: PAGE_GUIDANCE.dashboard.title, sections: PAGE_GUIDANCE.dashboard.sections }} />
+      <NextStepPanel step={PAGE_GUIDANCE.dashboard.sections.nextStep} detail="Use the work queue that is closest to field execution or release risk." />
 
       <PermissionNotice
         audience={[
@@ -131,6 +136,9 @@ function ClientDashboard({ projects, reviewCases, mediaFiles }) {
   return (
     <div className="space-y-6">
       <PageHeader title="Welcome to CCG Documentation Portal" description="Review published project packages, approved media, and client-safe responses from CCG." />
+      <DocumentationPageIntro guide={{ title: PAGE_GUIDANCE.dashboard.title, sections: PAGE_GUIDANCE.dashboard.sections }} />
+      <NextStepPanel step={PAGE_GUIDANCE.dashboard.sections.nextStep} detail="Use the work queue that is closest to field execution or release risk." />
+
       <PermissionNotice
         audience={[
           'Client Managers can review published projects across their organization and monitor shared case responses.',

@@ -15,7 +15,7 @@ export async function createCaptureSessionForSegment({ projectId, streetSegmentI
     project_id: projectId,
     street_segment_id: streetSegmentId,
     session_name: sessionName,
-    session_status: 'planned',
+    session_status: 'planning',
     qa_status: 'not_reviewed',
     ...sessionData,
   });

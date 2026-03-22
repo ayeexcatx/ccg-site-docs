@@ -3,12 +3,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { Link } from 'react-router-dom';
 import PageHeader from '@/components/ui/PageHeader';
-import { DocumentationPageIntro } from '@/components/ui/OperatingGuidance';
 import StatusBadge from '@/components/ui/StatusBadge';
 import PublishBadge from '@/components/ui/PublishBadge';
 import EmptyState from '@/components/ui/EmptyState';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { DocumentationPageIntro, NextStepPanel } from '@/components/ui/OperatingGuidance';
+import { PAGE_GUIDANCE } from '@/lib/workflowGuidance';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -63,45 +64,8 @@ export default function Projects() {
         <Button size="sm" className="gap-2" onClick={() => { setForm(emptyProject); setShowForm(true); }}><Plus className="w-4 h-4" /> New Project</Button>
       </PageHeader>
 
-      <DocumentationPageIntro
-        header={{
-          title: 'Projects Operational Overview',
-          purpose: 'Projects are the top-level Base44 record for every documentation engagement. Use this page to define scope, client alignment, and downstream workflow ownership before segment, route, media, and review work begins.',
-          role: 'Company admins, project managers, and operational leads own this page. Documenters usually consume project context downstream rather than creating or publishing project records here.',
-          workflowSummary: 'Create the project, confirm client and municipal metadata, define documentation expectations, then hand the project into segment planning, session scheduling, media registration, and marker review.',
-          visibilityRules: 'Internal notes, QA notes, and workflow-only fields remain company-side. Client visibility starts only after deliberate publication and a clean client-preview interpretation.',
-          nextSteps: 'Open a project detail page to manage readiness, validate the client preview, and then publish only the safe package.'
-        }}
-        guide={{
-          title: 'Project Setup Workflow',
-          description: 'Use project records to keep Base44 entities aligned from initial setup through client publication without changing the current in-house workflow model.',
-          sections: [
-            { heading: 'How It Works', body: ['Create a project for each documentation job and link it to the correct client organization.', 'Define project geography and documentation expectations before segment and session records are created.', 'Use project publication only after media, markers, and client-visible notes have cleared internal review.'] },
-            { heading: 'Operational Reminder', body: 'This project record should stay clean enough to support future additions such as 360 viewer workflows, synchronized map-video review, and AI-assisted tagging without reworking the entity model.' },
-          ],
-        }}
-      />
-
-
-      <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 mb-4">
-        <p className="text-sm font-semibold">Publishing explained</p>
-        <div className="mt-2 space-y-2 text-sm leading-6 text-muted-foreground">
-          <p>Publishing does not expose the entire project record. It exposes only the client-safe package: approved client notes, publish-safe media, and reviewed client-visible markers.</p>
-          <p>Internal notes, QA notes, route/session workflow context, and draft-only data remain internal even after publication and should be reviewed on the project detail page before handoff.</p>
-          <p>Review required views, route coverage, sessions, marker confirmation, media safety, and the client preview before promising that a portal package is ready.</p>
-          <p>Mistakes to avoid: publishing while the project is still draft-only, assuming a file is safe just because it exists, or copying internal language into client-visible notes.</p>
-        </div>
-      </div>
-
-      <div className="rounded-xl border bg-muted/30 p-4 mb-4">
-        <p className="text-sm font-semibold">Intended workflow sequence</p>
-        <ol className="mt-2 list-decimal pl-5 text-sm leading-6 text-muted-foreground space-y-1">
-          <li>Create the client organization first so the project has the correct ownership and portal audience.</li>
-          <li>Create the project and define required capture views before any route or field work begins.</li>
-          <li>Add street segments, then create capture sessions and route paths for each segment.</li>
-          <li>Run field sessions, upload media, review markers, and publish only after the project detail readiness checks are clean.</li>
-        </ol>
-      </div>
+      <DocumentationPageIntro guide={{ title: PAGE_GUIDANCE.projects.title, sections: PAGE_GUIDANCE.projects.sections }} />
+      <NextStepPanel step={PAGE_GUIDANCE.projects.sections.nextStep} detail="The project record only starts the workflow. Segment creation is where the operational plan becomes concrete." />
 
       <div className="flex items-center gap-3 mb-4 flex-wrap">
         <div className="relative flex-1 max-w-sm">

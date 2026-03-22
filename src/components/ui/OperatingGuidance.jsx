@@ -1,105 +1,88 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { CheckCircle2, Eye, ListChecks, Route, ClipboardList, Users, ArrowRightCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { CheckCircle2, ChevronDown, Eye, ListChecks, Route } from 'lucide-react';
 
-function Section({ title, body }) {
-  if (!body) return null;
+function Section({ title, body, ordered = false }) {
+  if (!body || (Array.isArray(body) && body.length === 0)) return null;
+  const items = Array.isArray(body) ? body : [body];
+  const Wrapper = ordered ? 'ol' : 'ul';
+
   return (
     <div className="space-y-2">
       <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-      {Array.isArray(body)
-        ? body.map((paragraph, index) => (
-            <p key={index} className="text-sm leading-6 text-muted-foreground">
-              {paragraph}
-            </p>
-          ))
-        : <p className="text-sm leading-6 text-muted-foreground">{body}</p>}
+      {Array.isArray(body) ? (
+        <Wrapper className={`space-y-2 text-sm leading-6 text-muted-foreground ${ordered ? 'list-decimal pl-5' : 'list-disc pl-5'}`}>
+          {items.map((item, index) => <li key={index}>{item}</li>)}
+        </Wrapper>
+      ) : (
+        <p className="text-sm leading-6 text-muted-foreground">{body}</p>
+      )}
     </div>
   );
 }
 
-function InfoCard({ icon: Icon, title, body }) {
-  if (!body) return null;
+export function CollapsibleInstructionPanel({ title = 'Page instructions', sections, instructionCards = [], defaultOpen = false }) {
   return (
-    <div className="rounded-xl border bg-muted/20 p-4">
-      <div className="mb-2 flex items-center gap-2">
-        <Icon className="h-4 w-4 text-primary" />
-        <p className="text-sm font-semibold text-foreground">{title}</p>
-      </div>
-      {Array.isArray(body)
-        ? body.map((item, index) => (
-            <p key={index} className="text-sm leading-6 text-muted-foreground">
-              {item}
-            </p>
-          ))
-        : <p className="text-sm leading-6 text-muted-foreground">{body}</p>}
-    </div>
-  );
-}
-
-export function PagePurposeHeader({
-  badge = 'Page Guide',
-  title,
-  purpose,
-  role,
-  workflowSummary,
-  visibilityRules,
-  nextSteps,
-}) {
-  return (
-    <Card className="border-primary/20 shadow-sm">
-      <CardHeader className="space-y-3">
-        <div className="flex items-center gap-2">
-          <Badge variant="secondary">{badge}</Badge>
-        </div>
-        <CardTitle className="text-xl">{title}</CardTitle>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-          <InfoCard icon={ClipboardList} title="Page purpose" body={purpose} />
-          <InfoCard icon={Users} title="Intended user role" body={role} />
-          <InfoCard icon={Route} title="Workflow summary" body={workflowSummary} />
-          <InfoCard icon={Eye} title="Internal vs client-visible rules" body={visibilityRules} />
-          <InfoCard icon={ArrowRightCircle} title="Next steps" body={nextSteps} />
-        </div>
-      </CardHeader>
-    </Card>
-  );
-}
-
-export function OperatingGuide({ title = 'Operating Guide', description, sections = [], instructionCards = [] }) {
-  return (
-    <Card className="border-primary/20 shadow-sm">
-      <CardHeader>
-        <div className="mb-2 flex items-center gap-2">
-          <Badge variant="secondary">Operating Guide</Badge>
-        </div>
-        <CardTitle className="text-xl">{title}</CardTitle>
-        {description && <p className="max-w-4xl text-sm leading-6 text-muted-foreground">{description}</p>}
-      </CardHeader>
-      <CardContent className="space-y-5">
-        {sections.map((section) => <Section key={section.heading} title={section.heading} body={section.body} />)}
-        {instructionCards.length > 0 && (
-          <div className="grid gap-3 md:grid-cols-2">
-            {instructionCards.map((instruction) => (
-              <div key={instruction.id || instruction.instruction_key} className="rounded-lg border bg-muted/30 p-4">
-                <p className="mb-1 text-sm font-semibold">{instruction.instruction_title}</p>
-                <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{instruction.instruction_body}</p>
-              </div>
-            ))}
+    <Collapsible defaultOpen={defaultOpen} className="rounded-xl border border-primary/20 bg-card shadow-sm">
+      <CollapsibleTrigger asChild>
+        <Button variant="ghost" className="flex h-auto w-full items-center justify-between rounded-xl px-5 py-4 text-left hover:bg-muted/30">
+          <div>
+            <div className="mb-2 flex items-center gap-2">
+              <Badge variant="secondary">Instructions</Badge>
+              <span className="text-xs text-muted-foreground">Starts collapsed</span>
+            </div>
+            <p className="text-lg font-semibold text-foreground">{title}</p>
+            <p className="text-sm text-muted-foreground">Open for step-by-step instructions, page explanations, examples, and workflow guidance.</p>
           </div>
-        )}
+          <ChevronDown className="h-5 w-5 shrink-0 text-muted-foreground transition-transform data-[state=open]:rotate-180" />
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="border-t px-5 py-5">
+          <div className="grid gap-5 lg:grid-cols-2">
+            <Section title="1. What this page is for" body={sections.purpose} />
+            <Section title="2. What you do here (step-by-step instructions)" body={sections.steps} ordered />
+            <Section title="3. What each part of the page does" body={sections.parts} />
+            <Section title="4. Example" body={sections.example} />
+            <Section title="5. What happens after this" body={sections.after} />
+            <Section title="6. Tips / mistakes to avoid" body={sections.tips} />
+          </div>
+          {!!instructionCards.length && (
+            <div className="mt-5 grid gap-3 md:grid-cols-2">
+              {instructionCards.map((instruction) => (
+                <div key={instruction.id || instruction.instruction_key} className="rounded-lg border bg-muted/30 p-4">
+                  <p className="mb-1 text-sm font-semibold">{instruction.instruction_title}</p>
+                  <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{instruction.instruction_body}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+export function NextStepPanel({ step, detail }) {
+  if (!step) return null;
+  return (
+    <Card className="border-primary/20 shadow-sm">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2"><Route className="h-4 w-4 text-primary" /> Next Step</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm font-medium">{step}</p>
+        {detail && <p className="mt-2 text-sm leading-6 text-muted-foreground">{detail}</p>}
       </CardContent>
     </Card>
   );
 }
 
-export function DocumentationPageIntro({ header, guide, instructionCards = [] }) {
-  return (
-    <div className="space-y-4">
-      <PagePurposeHeader {...header} />
-      <OperatingGuide {...guide} instructionCards={instructionCards} />
-    </div>
-  );
+export function DocumentationPageIntro({ guide, instructionCards = [] }) {
+  return <CollapsibleInstructionPanel title={guide.title} sections={guide.sections} instructionCards={instructionCards} />;
 }
 
 export function QAReviewChecklist({ title = 'QA / Review Checklist', items = [] }) {
