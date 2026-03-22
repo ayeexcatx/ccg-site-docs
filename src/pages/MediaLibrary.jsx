@@ -36,7 +36,7 @@ import {
   Video,
 } from 'lucide-react';
 import { VIEW_TYPE_LABELS } from '@/lib/constants';
-import { buildMediaAiPreparation, createViewerCapabilityMatrix, getStorageAdapterBlueprints, resolveStorageAdapter } from '@/lib/futureArchitecture';
+import { createViewerCapabilityMatrix, getStorageAdapterBlueprints, resolveStorageAdapter } from '@/lib/futureArchitecture';
 
 const MEDIA_TYPES = ['photo', 'video', 'video_360', 'thumbnail', 'preview_clip', 'document', 'export'];
 const MEDIA_ICONS = { photo: Image, video: Video, video_360: Globe, thumbnail: Image, preview_clip: Video, document: File, export: File };
@@ -222,7 +222,6 @@ export default function MediaLibrary() {
 
   const selectedStorage = resolveStorageAdapter(form.storage_mode);
   const selectedViewer = createViewerCapabilityMatrix(form);
-  const aiPreparation = buildMediaAiPreparation({ mediaFile: form, markerCount: mediaFiles.filter((media) => media.capture_session_id === form.capture_session_id).length, publishReadiness: form.publish_readiness });
 
   return (
     <div className="space-y-6">
@@ -387,17 +386,6 @@ export default function MediaLibrary() {
         description="These workflow notes keep the current app in-house-first while making room for larger source files and future 360 delivery without forcing a third-party provider into the current design."
         items={[
           {
-            key: 'aiMediaPrep',
-            title: 'AI tagging preparation layer',
-            status: aiPreparation.preparationStatus,
-            summary: 'Create review-only staging areas for future AI landmark, sign, and business suggestions without making AI part of the required media workflow.',
-            notice: aiPreparation.requiredReviewMessage,
-            workflow: 'Media records stay manual-first. Future AI suggestions can be attached as draft helper queues, but staff still decide whether to accept, edit, reject, or ignore them.',
-            entities: ['MediaFile', 'MediaMarker', 'ReviewCaseItem'],
-            actions: ['Accept into manual review', 'Edit suggestion', 'Reject suggestion'],
-            extensionPoints: [...aiPreparation.placeholderQueues.map((queue) => `${queue.title}: ${queue.description}`), ...aiPreparation.workflowHooks],
-          },
-          {
             key: 'viewer360',
             title: '360 viewer extension point',
             status: 'Extension-ready',
@@ -486,7 +474,6 @@ export default function MediaLibrary() {
                   <p>Create one record per operational asset. If you have both an original master and a preview derivative, keep them traceable here so reviewers know which file is for preservation and which is safe for quick playback or client delivery.</p>
                   <p>Use native upload by default. Use external registration when the source file is too large for normal in-app handling or must remain in an approved archive. Either way, keep publish decisions in this system.</p>
                   <p>Long-form roadway video and future 360 capture should usually publish from preview-safe derivatives, not from raw masters. Missing previews or thumbnails should usually keep the record internal.</p>
-                  <p>Any future AI landmark, sign, or business tagging attached to this media record must remain draft-only. AI is an assistant, not a source of final truth, and staff review is required before those suggestions enter Marker Review or any evidence workflow.</p>
                 </div>
               </div>
 
@@ -625,25 +612,6 @@ export default function MediaLibrary() {
                   <DetailRow label="Upload batch" value={batchMap[form.upload_batch_id]} helper="Batch linkage is recommended for large ingest events, especially long-form capture days." />
                   <DetailRow label="Storage adapter" value={selectedStorage?.label || 'Custom storage mode'} helper={selectedStorage?.adminNotes || 'If this record uses a custom path, document it thoroughly in internal notes.'} />
                   <DetailRow label="Viewer family" value={selectedViewer.viewerFamily} helper={selectedViewer.adminExplanation} />
-                  <div className="rounded-lg border border-purple-200 bg-purple-50 p-3">
-                    <p className="text-xs font-medium uppercase tracking-wide text-purple-900">AI tagging preparation</p>
-                    <p className="mt-1 text-sm font-medium text-purple-950">{aiPreparation.mediaLabel}</p>
-                    <p className="mt-2 text-xs leading-5 text-purple-900">{aiPreparation.requiredReviewMessage}</p>
-                    <div className="mt-3 space-y-2">
-                      {aiPreparation.placeholderQueues.map((queue) => (
-                        <div key={queue.key} className="rounded-md border bg-white/80 p-3">
-                          <p className="text-sm font-medium text-purple-950">{queue.title}</p>
-                          <p className="mt-1 text-xs leading-5 text-purple-900">{queue.description}</p>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            <Badge variant="outline" className="border-purple-300 bg-white text-purple-900">Draft / Unconfirmed</Badge>
-                            <Badge variant="outline" className="border-purple-300 bg-white text-purple-900">Accept</Badge>
-                            <Badge variant="outline" className="border-purple-300 bg-white text-purple-900">Edit</Badge>
-                            <Badge variant="outline" className="border-purple-300 bg-white text-purple-900">Reject</Badge>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
                   <DetailRow label="Preview status" value={form.preview_url ? 'Preview attached' : 'Preview missing'} helper="Preview derivatives are the normal review-safe and publish-safe path for long-form and 360 media." />
                   <DetailRow label="Thumbnail status" value={form.thumbnail_url ? 'Thumbnail attached' : 'Thumbnail missing'} helper="Thumbnails improve QA speed and client browsing stability." />
                   <DetailRow label="Publish selection" value={form.publish_to_client ? 'Selected for client exposure' : 'Internal only'} helper="Only select client exposure when readiness, QA, and derivative coverage are complete." />

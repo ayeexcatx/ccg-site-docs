@@ -27,17 +27,8 @@ export default function FutureReadyPanel({
               {item.status && <Badge variant="secondary">{item.status}</Badge>}
             </div>
             {item.summary && <p className="text-sm leading-6 text-muted-foreground">{item.summary}</p>}
-            {item.notice && <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-950">{item.notice}</div>}
             {item.workflow && <p className="mt-2 text-sm leading-6 text-muted-foreground"><span className="font-medium text-foreground">Workflow fit:</span> {item.workflow}</p>}
             {item.entities?.length > 0 && <p className="mt-2 text-sm leading-6 text-muted-foreground"><span className="font-medium text-foreground">Current entities:</span> {item.entities.join(', ')}</p>}
-            {item.actions?.length > 0 && (
-              <div className="mt-3 space-y-2">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Planned review controls</p>
-                <div className="flex flex-wrap gap-2">
-                  {item.actions.map((action) => <Badge key={action} variant="outline">{action}</Badge>)}
-                </div>
-              </div>
-            )}
             {item.extensionPoints?.length > 0 && (
               <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-muted-foreground">
                 {item.extensionPoints.map((point, index) => <li key={index}>{point}</li>)}
