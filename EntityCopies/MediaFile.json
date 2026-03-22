@@ -11,6 +11,9 @@
     "capture_session_id": {
       "type": "string"
     },
+    "upload_batch_id": {
+      "type": "string"
+    },
     "media_type": {
       "type": "string",
       "enum": [
@@ -27,8 +30,19 @@
     "media_title": {
       "type": "string"
     },
+    "media_title_override_for_client": {
+      "type": "string"
+    },
     "original_filename": {
       "type": "string"
+    },
+    "source_kind": {
+      "type": "string",
+      "enum": [
+        "native_upload",
+        "external_link"
+      ],
+      "default": "native_upload"
     },
     "storage_mode": {
       "type": "string",
@@ -39,13 +53,51 @@
       ],
       "default": "native_upload"
     },
+    "original_file_policy": {
+      "type": "string",
+      "enum": [
+        "keep_in_app",
+        "register_external_master",
+        "archive_external_master"
+      ],
+      "default": "keep_in_app"
+    },
     "file_url": {
+      "type": "string"
+    },
+    "original_file_url": {
       "type": "string"
     },
     "preview_url": {
       "type": "string"
     },
+    "preview_status": {
+      "type": "string",
+      "enum": [
+        "missing",
+        "queued",
+        "ready",
+        "error"
+      ],
+      "default": "missing"
+    },
     "thumbnail_url": {
+      "type": "string"
+    },
+    "thumbnail_status": {
+      "type": "string",
+      "enum": [
+        "missing",
+        "queued",
+        "ready",
+        "error"
+      ],
+      "default": "missing"
+    },
+    "external_storage_label": {
+      "type": "string"
+    },
+    "external_storage_path": {
       "type": "string"
     },
     "mime_type": {
@@ -71,6 +123,17 @@
     },
     "uploaded_by": {
       "type": "string"
+    },
+    "is_long_form": {
+      "type": "boolean",
+      "default": false
+    },
+    "long_form_minutes": {
+      "type": "number"
+    },
+    "is_360_media": {
+      "type": "boolean",
+      "default": false
     },
     "view_type": {
       "type": "string",
@@ -104,6 +167,21 @@
     "publish_to_client": {
       "type": "boolean",
       "default": false
+    },
+    "publish_readiness": {
+      "type": "string",
+      "enum": [
+        "not_reviewed",
+        "needs_preview",
+        "needs_thumbnail",
+        "qa_hold",
+        "ready_for_publish",
+        "published"
+      ],
+      "default": "not_reviewed"
+    },
+    "client_safe_media_id": {
+      "type": "string"
     },
     "processing_status": {
       "type": "string",
