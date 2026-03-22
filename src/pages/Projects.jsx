@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import PageHeader from '@/components/ui/PageHeader';
 import { DocumentationPageIntro } from '@/components/ui/OperatingGuidance';
 import StatusBadge from '@/components/ui/StatusBadge';
+import PublishBadge from '@/components/ui/PublishBadge';
 import EmptyState from '@/components/ui/EmptyState';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -68,8 +69,8 @@ export default function Projects() {
           purpose: 'Projects are the top-level Base44 record for every documentation engagement. Use this page to define scope, client alignment, and downstream workflow ownership before segment, route, media, and review work begins.',
           role: 'Company admins, project managers, and operational leads own this page. Documenters usually consume project context downstream rather than creating or publishing project records here.',
           workflowSummary: 'Create the project, confirm client and municipal metadata, define documentation expectations, then hand the project into segment planning, session scheduling, media registration, and marker review.',
-          visibilityRules: 'Internal notes and draft workflow status remain company-side. Client visibility starts only after deliberate publication and client-safe notes are reviewed.',
-          nextSteps: 'Open a project detail page to manage readiness, then add street segments, capture sessions, and publication-ready notes.'
+          visibilityRules: 'Internal notes, QA notes, and workflow-only fields remain company-side. Client visibility starts only after deliberate publication and a clean client-preview interpretation.',
+          nextSteps: 'Open a project detail page to manage readiness, validate the client preview, and then publish only the safe package.'
         }}
         guide={{
           title: 'Project Setup Workflow',
@@ -81,6 +82,16 @@ export default function Projects() {
         }}
       />
 
+
+      <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 mb-4">
+        <p className="text-sm font-semibold">Publishing explained</p>
+        <div className="mt-2 space-y-2 text-sm leading-6 text-muted-foreground">
+          <p>Publishing does not expose the entire project record. It exposes only the client-safe package: approved client notes, publish-safe media, and reviewed client-visible markers.</p>
+          <p>Internal notes, QA notes, route/session workflow context, and draft-only data remain internal even after publication and should be reviewed on the project detail page before handoff.</p>
+          <p>Review required views, route coverage, sessions, marker confirmation, media safety, and the client preview before promising that a portal package is ready.</p>
+          <p>Mistakes to avoid: publishing while the project is still draft-only, assuming a file is safe just because it exists, or copying internal language into client-visible notes.</p>
+        </div>
+      </div>
 
       <div className="rounded-xl border bg-muted/30 p-4 mb-4">
         <p className="text-sm font-semibold">Intended workflow sequence</p>
@@ -131,6 +142,8 @@ export default function Projects() {
                     <div className="flex items-center gap-2">
                       <StatusBadge status={p.project_status} />
                       <StatusBadge status={p.documentation_status} />
+                      <PublishBadge state={p.published_to_client ? 'client_published' : p.project_status === 'draft' ? 'draft_data' : 'internally_reviewed'} />
+                      <PublishBadge state={p.published_to_client ? 'publish_ready' : 'publish_blocked'} />
                       {p.published_to_client && <StatusBadge status="published" />}
                       <ArrowRight className="w-4 h-4 text-muted-foreground" />
                     </div>

@@ -4,6 +4,7 @@ const INTERNAL_DRAFT_PATTERN = /todo|tbd|draft|internal/i;
 const CHECKPOINT_EVENT_TYPES = ['intersection', 'landmark', 'curb_ramp'];
 const SESSION_LIFECYCLE_EVENT_TYPES = ['session_start', 'session_pause', 'session_resume', 'session_end'];
 const SESSION_NOTE_EVENT_TYPES = ['issue_note'];
+const CLIENT_NOTE_VALIDATION_PATTERN = /todo|tbd|draft|internal|fixme|placeholder|for qa|needs review/i;
 
 function toArray(value) {
   return Array.isArray(value) ? value : [];
@@ -21,9 +22,41 @@ function toSearchText(...parts) {
     .toLowerCase();
 }
 
+function asJsonArray(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function isApprovedSession(session = {}) {
+  return ['approved', 'published'].includes(session.session_status) || session.qa_status === 'approved';
+}
+
+function isSessionUploaded(session = {}) {
+  return ['uploaded', 'under_review', 'approved', 'published'].includes(session.session_status);
+}
+
+function isMediaPublishSafe(item = {}) {
+  const readinessOkay = ['ready_for_publish', 'published'].includes(item.publish_readiness);
+  const processingOkay = ['ready', 'archived'].includes(item.processing_status) || !item.processing_status;
+  const hasClientFile = Boolean(item.preview_url || item.file_url);
+  const needsPreview = ['video', 'video_360', 'preview_clip'].includes(item.media_type);
+  const needsThumbnail = item.media_type !== 'document';
+  const previewOkay = !needsPreview || item.preview_status === 'ready' || !!item.preview_url;
+  const thumbnailOkay = !needsThumbnail || item.thumbnail_status === 'ready' || !!item.thumbnail_url;
+  return readinessOkay && processingOkay && hasClientFile && previewOkay && thumbnailOkay;
+}
+
+function normalizeIssue(key, label, status, reason, severity = status === 'blocked' ? 'blocker' : 'warning') {
+  return { key, label, status, reason, severity, ready: status === 'ready' };
+}
+
 export function getVisibilityLabelForRecord(record = {}, clientField = 'client_visible_notes', internalField = 'internal_notes', visibleFlag = 'is_client_visible') {
-  // Visibility is intentionally derived from the same Base44 fields pages already use.
-  // Keeping this in one helper prevents subtle page-level disagreements.
   if (record?.[visibleFlag]) return 'client_visible';
   if (record?.[clientField] && !record?.[visibleFlag]) return 'needs_review';
   if (record?.[internalField]) return 'internal_only';
@@ -44,8 +77,6 @@ export function getVisibilityWarnings(record = {}, { clientField = 'client_visib
 }
 
 export function getMarkerConfidenceLabel(confidenceLevel) {
-  // A readable label makes review screens easier to scan and gives future workflow code
-  // a single place to define marker confidence vocabulary.
   const normalized = confidenceLevel || 'unknown';
   return {
     manual: 'Manual',
@@ -57,8 +88,6 @@ export function getMarkerConfidenceLabel(confidenceLevel) {
 }
 
 export function orderCheckpoints(checkpoints = []) {
-  // Checkpoints can be partially saved, template-seeded, or freshly reordered in memory.
-  // We sort first by explicit sequence order, then by original array order as a safe fallback.
   return toArray(checkpoints)
     .map((checkpoint, index) => ({ ...checkpoint, __originalIndex: index }))
     .sort((left, right) => {
@@ -122,48 +151,142 @@ export function getSegmentCoverageSummary({ segments = [], routes = [], sessions
 }
 
 export function getProjectReadinessSummary({ project, segments = [], sessions = [], media = [], markers = [], routes = [] }) {
-  // This helper intentionally mirrors the existing Base44-driven workflow rules so refactors
-  // stay behavior-compatible while making the publish logic easier to read.
   const coverage = getSegmentCoverageSummary({ segments, routes, sessions, media });
-  const requiredViewTypes = [
+  const projectRequiredViews = [
     project?.include_photos && 'profile',
     project?.include_standard_video && 'cross_section',
     project?.include_360_video && '360_walk',
   ].filter(Boolean);
-  const viewTypesPresent = requiredViewTypes.filter((type) => toArray(media).some((item) => item.view_type === type));
-  const uploadedSessions = toArray(sessions).filter((session) => ['uploaded', 'under_review', 'approved', 'published'].includes(session.session_status));
-  const completeSessions = toArray(sessions).filter((session) => ['approved', 'published'].includes(session.session_status));
-  const mediaAttached = toArray(media).filter((item) => !!item.file_url || !!item.thumbnail_url);
+  const segmentExpectedViews = [...new Set(toArray(segments).flatMap((segment) => asJsonArray(segment.expected_views_json)))];
+  const requiredViewTypes = [...new Set([...projectRequiredViews, ...segmentExpectedViews])];
+  const uploadedSessions = toArray(sessions).filter(isSessionUploaded);
+  const completeSessions = toArray(sessions).filter(isApprovedSession);
+  const mediaAttached = toArray(media).filter((item) => !!item.file_url || !!item.preview_url || !!item.thumbnail_url);
   const reviewedMarkers = toArray(markers).filter((marker) => marker.confidence_level === 'confirmed');
   const clientSafeMarkers = toArray(markers).filter((marker) => getVisibilityLabelForRecord(marker) === 'client_visible');
-  const notesValidated = !project?.client_visible_notes || !INTERNAL_DRAFT_PATTERN.test(project.client_visible_notes);
+  const mediaBySegment = toArray(media).reduce((accumulator, item) => {
+    const key = item.street_segment_id || 'unassigned';
+    accumulator[key] ||= [];
+    accumulator[key].push(item);
+    return accumulator;
+  }, {});
+  const routesBySegment = toArray(routes).reduce((accumulator, item) => {
+    const key = item.street_segment_id || 'unassigned';
+    accumulator[key] ||= [];
+    accumulator[key].push(item);
+    return accumulator;
+  }, {});
+  const sessionsBySegment = toArray(sessions).reduce((accumulator, item) => {
+    const key = item.street_segment_id || 'unassigned';
+    accumulator[key] ||= [];
+    accumulator[key].push(item);
+    return accumulator;
+  }, {});
+  const publishedMedia = toArray(media).filter((item) => item.publish_to_client);
+  const publishSafeMedia = publishedMedia.filter(isMediaPublishSafe);
+  const unsafePublishedMedia = publishedMedia.filter((item) => !isMediaPublishSafe(item));
+  const notesValidated = !project?.client_visible_notes || !CLIENT_NOTE_VALIDATION_PATTERN.test(project.client_visible_notes);
+  const segmentNotesNeedingReview = toArray(segments).filter((segment) => {
+    const note = segment.client_visible_notes?.trim?.();
+    return note && CLIENT_NOTE_VALIDATION_PATTERN.test(note);
+  });
+  const mediaNotesNeedingReview = toArray(media).filter((item) => {
+    const note = item.client_visible_notes?.trim?.();
+    return note && CLIENT_NOTE_VALIDATION_PATTERN.test(note);
+  });
+  const markerNotesNeedingReview = toArray(markers).filter((marker) => {
+    const note = marker.client_visible_notes?.trim?.();
+    return note && CLIENT_NOTE_VALIDATION_PATTERN.test(note);
+  });
+  const unreviewedVisibleMarkers = clientSafeMarkers.filter((marker) => marker.confidence_level !== 'confirmed');
+  const segmentsMissingRoutes = toArray(segments).filter((segment) => !toArray(routesBySegment[segment.id]).length);
+  const segmentsMissingSessions = toArray(segments).filter((segment) => !toArray(sessionsBySegment[segment.id]).length);
+  const segmentsMissingMedia = toArray(segments).filter((segment) => !toArray(mediaBySegment[segment.id]).length);
+  const segmentsMissingRequiredViews = toArray(segments).filter((segment) => {
+    const expectedViews = [...new Set([...projectRequiredViews, ...asJsonArray(segment.expected_views_json)])];
+    if (!expectedViews.length) return false;
+    const segmentViews = new Set(toArray(mediaBySegment[segment.id]).map((item) => item.view_type).filter(Boolean));
+    return expectedViews.some((viewType) => !segmentViews.has(viewType));
+  });
 
-  const checklist = [
-    { key: 'segments', label: 'Required segments present', ready: segments.length > 0, reason: segments.length ? `${segments.length} scoped segments loaded.` : 'Add at least one segment before publishing.' },
-    { key: 'view_types', label: 'Required view types present', ready: requiredViewTypes.every((type) => viewTypesPresent.includes(type)), reason: requiredViewTypes.length ? `${viewTypesPresent.length}/${requiredViewTypes.length} required view types are covered.` : 'Project view requirements are not yet defined.' },
-    { key: 'sessions', label: 'Sessions complete', ready: sessions.length > 0 && completeSessions.length === sessions.length, reason: sessions.length ? `${completeSessions.length}/${sessions.length} sessions are approved or published.` : 'Create and complete at least one capture session.' },
-    { key: 'media', label: 'Media attached', ready: mediaAttached.length > 0, reason: mediaAttached.length ? `${mediaAttached.length} media records have client-deliverable files or thumbnails.` : 'Attach media assets before publishing.' },
-    { key: 'markers', label: 'Markers reviewed', ready: markers.length > 0 && reviewedMarkers.length === markers.length, reason: markers.length ? `${reviewedMarkers.length}/${markers.length} markers are confirmed.` : 'Add and review markers before publishing.' },
-    { key: 'notes', label: 'Client-visible notes validated', ready: notesValidated && clientSafeMarkers.length >= 0, reason: notesValidated ? 'Client-facing notes do not include draft/internal language.' : 'Client-visible notes contain draft/internal wording that must be cleaned up.' },
+  const issues = [
+    normalizeIssue('draft_data', 'Draft data still driving the package', project?.project_status === 'draft' || project?.documentation_status === 'not_started'
+      ? 'blocked'
+      : project?.documentation_status === 'reviewed' || project?.documentation_status === 'published'
+        ? 'ready'
+        : 'warning', project?.project_status === 'draft' || project?.documentation_status === 'not_started'
+      ? 'The project is still marked as draft/not started, so the package should remain internal only.'
+      : project?.documentation_status === 'reviewed' || project?.documentation_status === 'published'
+        ? 'The project record shows a reviewed documentation state rather than a draft-only state.'
+        : 'The project is in active production. Keep publication expectations internal until internal review is complete.'),
+    normalizeIssue('required_views', 'Required views are complete', requiredViewTypes.length === 0
+      ? 'blocked'
+      : segmentsMissingRequiredViews.length === 0 && requiredViewTypes.every((type) => toArray(media).some((item) => item.view_type === type))
+        ? 'ready'
+        : 'blocked', requiredViewTypes.length === 0
+      ? 'No required views are defined yet. Set expected views at the project or segment level before publishing.'
+      : segmentsMissingRequiredViews.length === 0
+        ? `${requiredViewTypes.length} required view types are represented across the project.`
+        : `${segmentsMissingRequiredViews.length} segments are still missing one or more required view types.`),
+    normalizeIssue('sessions', 'Sessions exist for scoped segments', segments.length > 0 && segmentsMissingSessions.length === 0 && sessions.length > 0 ? 'ready' : 'blocked', segments.length === 0
+      ? 'Add scoped segments first so session coverage can be evaluated.'
+      : !sessions.length
+        ? 'No capture sessions exist yet for this project.'
+        : `${segmentsMissingSessions.length} segments are still missing capture sessions.`),
+    normalizeIssue('route_data', 'Route data covers the scoped segments', segments.length > 0 && segmentsMissingRoutes.length === 0 && routes.length > 0 ? 'ready' : 'blocked', segments.length === 0
+      ? 'Add scoped segments first so route completeness can be evaluated.'
+      : !routes.length
+        ? 'No route paths exist yet for this project.'
+        : `${segmentsMissingRoutes.length} segments are still missing route path data.`),
+    normalizeIssue('reviewed_markers', 'Reviewed markers support client context', markers.length > 0 && unreviewedVisibleMarkers.length === 0 && reviewedMarkers.length > 0 ? 'ready' : markers.length === 0 ? 'warning' : 'blocked', markers.length === 0
+      ? 'No markers exist yet. The package can still move internally, but client guidance will be weaker until reviewed markers are added.'
+      : unreviewedVisibleMarkers.length === 0
+        ? `${reviewedMarkers.length}/${markers.length} markers are confirmed and all client-visible markers are reviewed.`
+        : `${unreviewedVisibleMarkers.length} client-visible markers are still not confirmed.`),
+    normalizeIssue('client_notes', 'Client-visible notes are validated', notesValidated && !segmentNotesNeedingReview.length && !mediaNotesNeedingReview.length && !markerNotesNeedingReview.length ? 'ready' : 'blocked', notesValidated && !segmentNotesNeedingReview.length && !mediaNotesNeedingReview.length && !markerNotesNeedingReview.length
+      ? 'Client-facing summaries and notes do not contain draft/internal wording.'
+      : 'Some project, segment, media, or marker client-visible notes still contain draft/internal phrasing.'),
+    normalizeIssue('media_publish_safe', 'Media is marked safe for publish', unsafePublishedMedia.length === 0 && publishSafeMedia.length === publishedMedia.length ? publishedMedia.length ? 'ready' : 'warning' : 'blocked', !publishedMedia.length
+      ? 'No media is currently selected for client publishing yet.'
+      : unsafePublishedMedia.length === 0
+        ? `${publishSafeMedia.length} published media records have safe preview/thumbnail/readiness coverage.`
+        : `${unsafePublishedMedia.length} media records are selected for client publishing without full publish-safe readiness.`),
+    normalizeIssue('media_attached', 'Media coverage exists for scoped segments', segments.length > 0 && mediaAttached.length > 0 && segmentsMissingMedia.length === 0 ? 'ready' : 'blocked', !mediaAttached.length
+      ? 'Attach media files or preview-safe derivatives before publishing.'
+      : `${segmentsMissingMedia.length} segments still have no media coverage attached.`),
   ];
+
+  const blockers = issues.filter((issue) => issue.status === 'blocked').map((issue) => `${issue.label}: ${issue.reason}`);
+  const warnings = issues.filter((issue) => issue.status === 'warning').map((issue) => `${issue.label}: ${issue.reason}`);
+  const internalReviewReady = blockers.length === 0;
+  const publishReadiness = internalReviewReady && unsafePublishedMedia.length === 0 && notesValidated;
+  const publishPhase = project?.published_to_client ? 'client_published' : internalReviewReady ? 'internally_reviewed' : 'draft_data';
 
   return {
     routeCompleteness: coverage.routeCompleteness,
     sessionCompleteness: coverage.sessionCompleteness,
     uploadReadiness: uploadedSessions.length === sessions.length && sessions.length > 0,
-    reviewReadiness: reviewedMarkers.length >= Math.max(1, Math.floor(markers.length * 0.6 || 1)),
-    publishReadiness: checklist.every((check) => check.ready),
-    checklist,
-    blockers: checklist.filter((check) => !check.ready).map((check) => `${check.label}: ${check.reason}`),
+    reviewReadiness: internalReviewReady,
+    publishReadiness,
+    publishPhase,
+    checklist: issues,
+    blockers,
+    warnings,
     summary: {
       requiredViewTypes,
-      viewTypesPresent,
+      viewTypesPresent: [...new Set(toArray(media).map((item) => item.view_type).filter(Boolean))],
       completeSessions: completeSessions.length,
       totalSessions: sessions.length,
       reviewedMarkers: reviewedMarkers.length,
       totalMarkers: markers.length,
       mediaAttached: mediaAttached.length,
       clientSafeMarkers: clientSafeMarkers.length,
+      publishedMedia: publishedMedia.length,
+      publishSafeMedia: publishSafeMedia.length,
+      unsafePublishedMedia: unsafePublishedMedia.length,
+      segmentsMissingRoutes: segmentsMissingRoutes.length,
+      segmentsMissingSessions: segmentsMissingSessions.length,
+      segmentsMissingRequiredViews: segmentsMissingRequiredViews.length,
       coverage,
     },
   };
@@ -173,6 +296,7 @@ export function getProjectPublishWarnings({ project, segments = [], sessions = [
   const readiness = getProjectReadinessSummary({ project, segments, sessions, media, markers, routes });
   return [
     ...readiness.blockers,
+    ...readiness.warnings,
     ...getVisibilityWarnings(project, { visibleFlag: 'published_to_client' }),
   ];
 }
@@ -190,21 +314,30 @@ export function getProjectDetailSummary({ project, segments = [], sessions = [],
     return accumulator;
   }, {});
 
-  // These cards drive the project-level publish gate, so we keep the rule definitions here
-  // instead of duplicating them inside the page component.
   const summaryCards = [
-    { label: 'Segments', value: `${segments.length}`, detail: `${readiness.summary.coverage.routedSegments} routed / ${readiness.summary.coverage.totalSegments} total`, ready: readiness.summary.coverage.routeCompleteness === 100 },
-    { label: 'Sessions', value: `${sessions.length}`, detail: `${readiness.summary.completeSessions}/${readiness.summary.totalSessions} approved or published`, ready: readiness.summary.completeSessions === readiness.summary.totalSessions && readiness.summary.totalSessions > 0 },
-    { label: 'Media', value: `${media.length}`, detail: `${readiness.summary.mediaAttached} attached files ready for review`, ready: readiness.uploadReadiness },
-    { label: 'Markers', value: `${markers.length}`, detail: `${readiness.summary.reviewedMarkers}/${readiness.summary.totalMarkers} confirmed`, ready: readiness.reviewReadiness },
-    { label: 'Publish state', value: readiness.publishReadiness ? 'Ready' : 'Blocked', detail: project?.published_to_client ? 'Already published to client.' : 'Internal readiness gate for publication.', ready: readiness.publishReadiness },
-    { label: 'Missing required items', value: `${readiness.blockers.length}`, detail: readiness.blockers.length === 0 ? 'No blockers detected.' : 'Outstanding publish blockers remain.', ready: readiness.blockers.length === 0 },
+    { label: 'Draft data', value: readiness.publishPhase === 'draft_data' ? 'Active' : 'Cleared', detail: 'Draft/internal production data stays company-side until internal review is complete.', ready: readiness.publishPhase !== 'draft_data' },
+    { label: 'Internal review', value: readiness.reviewReadiness ? 'Ready' : 'Pending', detail: `${readiness.blockers.length} blockers and ${readiness.warnings.length} warnings are currently open.`, ready: readiness.reviewReadiness },
+    { label: 'Client-visible package', value: `${readiness.summary.publishSafeMedia}/${readiness.summary.publishedMedia}`, detail: 'Publish-safe media currently selected for the client package.', ready: readiness.summary.unsafePublishedMedia === 0 && readiness.summary.publishedMedia > 0 },
+    { label: 'Route and session coverage', value: `${readiness.summary.coverage.routeCompleteness}% / ${readiness.summary.coverage.sessionCompleteness}%`, detail: `${readiness.summary.segmentsMissingRoutes} segments missing routes and ${readiness.summary.segmentsMissingSessions} missing sessions.`, ready: readiness.summary.segmentsMissingRoutes === 0 && readiness.summary.segmentsMissingSessions === 0 },
+    { label: 'Required view coverage', value: `${readiness.summary.viewTypesPresent.length}/${readiness.summary.requiredViewTypes.length || 0}`, detail: readiness.summary.requiredViewTypes.length ? `${readiness.summary.segmentsMissingRequiredViews} segments still missing required views.` : 'Expected views have not been defined yet.', ready: readiness.summary.requiredViewTypes.length > 0 && readiness.summary.segmentsMissingRequiredViews === 0 },
+    { label: 'Publish state', value: project?.published_to_client ? 'Published' : readiness.publishReadiness ? 'Publish Ready' : 'Publish Blocked', detail: project?.published_to_client ? 'Client portal is currently showing the published package.' : 'Client release remains gated behind the readiness checks below.', ready: project?.published_to_client || readiness.publishReadiness },
   ];
 
-  return { readiness, mediaCounts, markerCounts, summaryCards };
+  const publishSummary = {
+    phase: readiness.publishPhase,
+    phaseLabel: readiness.publishPhase === 'client_published' ? 'Client-visible published data' : readiness.publishPhase === 'internally_reviewed' ? 'Internally reviewed data' : 'Draft data',
+    blockers: readiness.blockers.length,
+    warnings: readiness.warnings.length,
+    safeMedia: readiness.summary.publishSafeMedia,
+    selectedMedia: readiness.summary.publishedMedia,
+    reviewedMarkers: readiness.summary.reviewedMarkers,
+    totalMarkers: readiness.summary.totalMarkers,
+  };
+
+  return { readiness, mediaCounts, markerCounts, summaryCards, publishSummary };
 }
 
-export function getFieldSessionSummary(params = {}) {
+export function getFieldSessionSummary(params = {}) { /* unchanged below */
   const { checkpoints = [], events = [], finalElapsedSeconds } = params;
   const orderedEvents = toArray(events).slice().sort((left, right) => (left.timestamp_offset_seconds || 0) - (right.timestamp_offset_seconds || 0));
   const groupedEvents = {
@@ -319,8 +452,6 @@ export function getMarkerReviewSummary(params = {}) {
 }
 
 export function groupMediaBySegmentViewSession(mediaFiles = []) {
-  // We group by segment, then view, then session because that mirrors how documentation
-  // work is planned, captured, and eventually reviewed by clients.
   return toArray(mediaFiles).reduce((segmentAccumulator, item) => {
     const segmentKey = item.street_segment_id || 'unassigned';
     const viewKey = item.view_type || 'unknown_view';
@@ -334,17 +465,17 @@ export function groupMediaBySegmentViewSession(mediaFiles = []) {
   }, {});
 }
 
-export function getClientVisibleProjectData({ project, segments = [], media = [], markers = [] }) {
-  // Client viewers should only receive fields that are approved for portal use.
-  // This helper centralizes that rule so portal pages do not handcraft visibility checks.
+export function getClientVisibleProjectData({ project, segments = [], media = [], markers = [], previewMode = false }) {
   const publishedMedia = toArray(media)
-    .filter((item) => item.publish_to_client)
+    .filter((item) => previewMode ? isMediaPublishSafe(item) && !!item.publish_to_client : item.publish_to_client && isMediaPublishSafe(item))
     .map((item) => ({
       ...item,
       internal_notes: undefined,
+      external_storage_path: undefined,
+      original_file_url: undefined,
     }));
   const clientVisibleMarkers = toArray(markers)
-    .filter((marker) => getVisibilityLabelForRecord(marker) === 'client_visible')
+    .filter((marker) => getVisibilityLabelForRecord(marker) === 'client_visible' && marker.confidence_level === 'confirmed')
     .filter((marker) => publishedMedia.some((item) => item.id === marker.media_file_id))
     .map((marker) => ({
       ...marker,
@@ -355,6 +486,8 @@ export function getClientVisibleProjectData({ project, segments = [], media = []
     .map((segment) => ({
       ...segment,
       internal_notes: undefined,
+      expected_views_json: undefined,
+      route_length_notes: undefined,
     }));
 
   return {
@@ -366,8 +499,8 @@ export function getClientVisibleProjectData({ project, segments = [], media = []
   };
 }
 
-export function getClientProjectViewerModel({ project, segments = [], media = [], markers = [], search = '', selectedSegmentId = 'all', selectedViewType = 'all' }) {
-  const clientVisibleProjectData = getClientVisibleProjectData({ project, segments, media, markers });
+export function getClientProjectViewerModel({ project, segments = [], media = [], markers = [], search = '', selectedSegmentId = 'all', selectedViewType = 'all', previewMode = false }) {
+  const clientVisibleProjectData = getClientVisibleProjectData({ project, segments, media, markers, previewMode });
   const publishedMedia = clientVisibleProjectData.media;
   const clientMarkers = clientVisibleProjectData.markers;
   const segmentMap = buildEntityMap(clientVisibleProjectData.segments);
@@ -381,7 +514,7 @@ export function getClientProjectViewerModel({ project, segments = [], media = []
   });
 
   const filteredMedia = publishedMedia.filter((item) => {
-    const matchesSearch = toSearchText(item.media_title, item.client_visible_notes).includes(normalizedSearch);
+    const matchesSearch = toSearchText(item.media_title_override_for_client, item.media_title, item.client_visible_notes).includes(normalizedSearch);
     const matchesSegment = selectedSegmentId === 'all' || item.street_segment_id === selectedSegmentId;
     const matchesViewType = selectedViewType === 'all' || item.view_type === selectedViewType;
     return matchesSearch && matchesSegment && matchesViewType;
