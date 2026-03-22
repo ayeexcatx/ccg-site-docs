@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { DocumentationPageIntro } from '@/components/ui/OperatingGuidance';
 import { PAGE_GUIDANCE } from '@/lib/workflowGuidance';
 import { formatTimestamp } from '@/lib/displayUtils';
-import { Search, Clock3, FileVideo, MapPinned, CheckCircle2, XCircle } from 'lucide-react';
+import { Search, Clock3, FileVideo, MapPinned, CheckCircle2, Pencil, XCircle } from 'lucide-react';
 
 const emptyEdit = {
   id: '',
@@ -21,6 +21,8 @@ const emptyEdit = {
   nearest_address: '',
   nearby_place_name: '',
   search_text: '',
+  search_keywords: '',
+  rejection_reason: '',
 };
 
 export default function TimelineReview() {
@@ -66,6 +68,7 @@ export default function TimelineReview() {
       item.nearest_address,
       item.nearby_place_name,
       item.search_text,
+      item.search_keywords,
       projectMap[item.project_id]?.project_name,
       sessionMap[item.capture_session_id]?.session_name,
       mediaMap[item.media_file_id]?.media_title,
@@ -80,6 +83,8 @@ export default function TimelineReview() {
       nearest_address: item.nearest_address || '',
       nearby_place_name: item.nearby_place_name || '',
       search_text: item.search_text || '',
+      search_keywords: item.search_keywords || '',
+      rejection_reason: item.rejection_reason || '',
     });
     setShowEditDialog(true);
   };
@@ -88,8 +93,8 @@ export default function TimelineReview() {
     <div className="space-y-6">
       <PageHeader
         title="Timeline Review"
-        description="Review auto-generated timeline metadata, confirm likely locations, clean the search text, and accept or reject suggested cut context."
-        helpText="This page is now centered on the search timeline built from paired video plus GPX/FIT tracks."
+        description="Review auto-generated timeline and location metadata, confirm or edit likely matches, and reject bad metadata before publication."
+        helpText="Use this page to clean searchable timeline text produced from paired video and GPX/FIT tracks."
       />
 
       <DocumentationPageIntro guide={{ title: PAGE_GUIDANCE.timeline_review.title, sections: PAGE_GUIDANCE.timeline_review.sections }} />
@@ -137,7 +142,7 @@ export default function TimelineReview() {
                     <div className="space-y-3">
                       <div className="rounded-lg border p-3 space-y-2">
                         <p><span className="font-medium text-foreground">Likely intersection:</span> {item.nearest_intersection || 'Not inferred'}</p>
-                        <p><span className="font-medium text-foreground">Likely address:</span> {item.nearest_address || item.address_range || 'Not inferred'}</p>
+                        <p><span className="font-medium text-foreground">Likely address reference:</span> {item.nearest_address || item.address_range || 'Not inferred'}</p>
                         <p><span className="font-medium text-foreground">Nearby place:</span> {item.nearby_place_name || 'Not inferred'}</p>
                         <p><span className="font-medium text-foreground">Search text:</span> {item.search_text || 'No search text stored yet.'}</p>
                       </div>
@@ -155,9 +160,9 @@ export default function TimelineReview() {
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2 justify-end">
-                    <Button variant="outline" onClick={() => openEditor(item)}>Edit metadata</Button>
-                    <Button variant="secondary" className="gap-2" onClick={() => updateTimelineMut.mutate({ id: item.id, data: { review_status: 'confirmed', client_visible: true } })}><CheckCircle2 className="h-4 w-4" /> Confirm</Button>
-                    <Button variant="destructive" className="gap-2" onClick={() => updateTimelineMut.mutate({ id: item.id, data: { review_status: 'rejected', client_visible: false } })}><XCircle className="h-4 w-4" /> Reject</Button>
+                    <Button variant="outline" className="gap-2" onClick={() => openEditor(item)}><Pencil className="h-4 w-4" /> Edit</Button>
+                    <Button variant="secondary" className="gap-2" onClick={() => updateTimelineMut.mutate({ id: item.id, data: { review_status: 'confirmed', client_visible: true, rejection_reason: '' } })}><CheckCircle2 className="h-4 w-4" /> Confirm</Button>
+                    <Button variant="destructive" className="gap-2" onClick={() => updateTimelineMut.mutate({ id: item.id, data: { review_status: 'rejected', client_visible: false, rejection_reason: 'Rejected during timeline QA.' } })}><XCircle className="h-4 w-4" /> Reject</Button>
                   </div>
                 </CardContent>
               </Card>
@@ -174,6 +179,8 @@ export default function TimelineReview() {
             <div><Label>Likely address reference</Label><Input value={editForm.nearest_address} onChange={(event) => setEditForm((current) => ({ ...current, nearest_address: event.target.value }))} /></div>
             <div><Label>Nearby place</Label><Input value={editForm.nearby_place_name} onChange={(event) => setEditForm((current) => ({ ...current, nearby_place_name: event.target.value }))} /></div>
             <div><Label>Search text</Label><Input value={editForm.search_text} onChange={(event) => setEditForm((current) => ({ ...current, search_text: event.target.value }))} /></div>
+            <div><Label>Extra search keywords</Label><Input value={editForm.search_keywords} onChange={(event) => setEditForm((current) => ({ ...current, search_keywords: event.target.value }))} placeholder="Example: signal, school frontage, southbound" /></div>
+            <div><Label>Rejection note</Label><Input value={editForm.rejection_reason} onChange={(event) => setEditForm((current) => ({ ...current, rejection_reason: event.target.value }))} placeholder="Optional if the current metadata should be rejected later." /></div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setShowEditDialog(false); setEditForm(emptyEdit); }}>Cancel</Button>

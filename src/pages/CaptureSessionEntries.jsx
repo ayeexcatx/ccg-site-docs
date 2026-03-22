@@ -14,14 +14,15 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { DocumentationPageIntro } from '@/components/ui/OperatingGuidance';
 import { PAGE_GUIDANCE } from '@/lib/workflowGuidance';
 import { formatLabel } from '@/lib/displayUtils';
-import { ClipboardList, Plus, Search, Sparkles } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { ClipboardList, ListOrdered, Plus, Search, Sparkles } from 'lucide-react';
 
 const sessionTemplates = [
-  { key: 'include_right_profile', label: 'Right Profile', viewType: 'right_profile', captureMethod: 'video' },
-  { key: 'include_left_profile', label: 'Left Profile', viewType: 'left_profile', captureMethod: 'video' },
-  { key: 'include_curb_line', label: 'Curb Line / Edge of Pavement', viewType: 'curb_line_edge_of_pavement', captureMethod: 'video' },
-  { key: 'include_cross_section', label: 'Cross Section', viewType: 'cross_section', captureMethod: 'video' },
-  { key: 'include_360_walk', label: '360 Walk', viewType: '360_walk', captureMethod: 'video_360' },
+  { key: 'include_right_profile', label: 'Right Profile', viewType: 'right_profile', captureMethod: 'video', category: 'standard' },
+  { key: 'include_left_profile', label: 'Left Profile', viewType: 'left_profile', captureMethod: 'video', category: 'standard' },
+  { key: 'include_curb_line', label: 'Curb Line / Edge of Pavement', viewType: 'curb_line_edge_of_pavement', captureMethod: 'video', category: 'standard' },
+  { key: 'include_cross_section', label: 'Cross Section', viewType: 'cross_section', captureMethod: 'video', category: 'standard' },
+  { key: 'include_360_walk', label: '360 Walk', viewType: '360_walk', captureMethod: 'video_360', category: 'optional' },
 ];
 
 const emptyEntry = {
@@ -43,6 +44,8 @@ const emptyEntry = {
   include_360_walk: false,
   recording_order: 1,
   active: true,
+  generated_session_count: 0,
+  generation_status: 'not_started',
 };
 
 function buildSessionPayload(entry, projectName, template, sequence) {
@@ -70,6 +73,8 @@ function buildSessionPayload(entry, projectName, template, sequence) {
     gps_sync_status: 'not_started',
     timeline_index_status: 'not_started',
     qa_status: 'not_reviewed',
+    video_upload_status: 'not_uploaded',
+    session_handoff_status: 'not_started',
   };
 }
 
@@ -106,13 +111,24 @@ export default function CaptureSessionEntries() {
     mutationFn: async (entry) => {
       const projectName = projects.find((project) => project.id === entry.project_id)?.project_name;
       const selectedTemplates = sessionTemplates.filter((template) => entry[template.key]);
-      for (const [index, template] of selectedTemplates.entries()) {
+      const existingSessions = sessions.filter((session) => session.capture_session_entry_id === entry.id);
+      const existingViews = new Set(existingSessions.map((session) => session.default_view_type));
+      const pendingTemplates = selectedTemplates.filter((template) => !existingViews.has(template.viewType));
+
+      for (const [index, template] of pendingTemplates.entries()) {
         await base44.entities.CaptureSession.create(buildSessionPayload(entry, projectName, template, index));
       }
-      return selectedTemplates.length;
+
+      await base44.entities.CaptureSessionEntry.update(entry.id, {
+        generated_session_count: existingSessions.length + pendingTemplates.length,
+        generation_status: pendingTemplates.length === 0 && existingSessions.length > 0 ? 'generated' : pendingTemplates.length === selectedTemplates.length ? 'generated' : 'partially_generated',
+      });
+
+      return pendingTemplates.length;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['capture-sessions'] });
+      queryClient.invalidateQueries({ queryKey: ['capture-session-entries'] });
     },
   });
 
@@ -145,8 +161,8 @@ export default function CaptureSessionEntries() {
     <div className="space-y-6">
       <PageHeader
         title="Capture Session Entries"
-        description="Define roadway, range, and frontage capture entries first, then auto-generate the sessions crews will actually record."
-        helpText="Keep setup light: describe the corridor once, choose the standard views, and generate the right session stack in one click."
+        description="Describe the road, range, or frontage once, then auto-generate the session stack crews will actually record."
+        helpText="Example entries: Main Street from Oak Ave to Elm Ave, Robert Street from Main St to Park Ave, or Curb Ramp Range A–F."
       >
         <Button size="sm" className="gap-2" onClick={() => setShowForm(true)}>
           <Plus className="w-4 h-4" /> Add Entry
@@ -156,9 +172,9 @@ export default function CaptureSessionEntries() {
       <DocumentationPageIntro guide={{ title: PAGE_GUIDANCE.capture_session_entries.title, sections: PAGE_GUIDANCE.capture_session_entries.sections }} />
 
       <div className="grid gap-4 md:grid-cols-3">
-        <Card><CardContent className="p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">Entries ready</p><p className="mt-2 text-2xl font-semibold">{activeEntryCount}</p><p className="mt-2 text-sm text-muted-foreground">Roadway and range definitions that can generate session work.</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">Generated sessions</p><p className="mt-2 text-2xl font-semibold">{generatedSessionCount}</p><p className="mt-2 text-sm text-muted-foreground">Sessions already spun up from entry templates.</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">360-ready entries</p><p className="mt-2 text-2xl font-semibold">{entries.filter((entry) => entry.include_360_walk).length}</p><p className="mt-2 text-sm text-muted-foreground">Entries configured to add the optional 360 walk pass.</p></CardContent></Card>
+        <Card><CardContent className="p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">Entries ready</p><p className="mt-2 text-2xl font-semibold">{activeEntryCount}</p><p className="mt-2 text-sm text-muted-foreground">Roadway and range definitions that can spin up generated sessions.</p></CardContent></Card>
+        <Card><CardContent className="p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">Generated sessions</p><p className="mt-2 text-2xl font-semibold">{generatedSessionCount}</p><p className="mt-2 text-sm text-muted-foreground">Sessions already created from entry templates.</p></CardContent></Card>
+        <Card><CardContent className="p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">360 enabled</p><p className="mt-2 text-2xl font-semibold">{entries.filter((entry) => entry.include_360_walk).length}</p><p className="mt-2 text-sm text-muted-foreground">Entries that will add the optional 360 walk session.</p></CardContent></Card>
       </div>
 
       <div className="grid gap-3 md:grid-cols-[1fr_240px]">
@@ -176,7 +192,7 @@ export default function CaptureSessionEntries() {
       </div>
 
       {isLoading ? <div className="flex justify-center py-12"><div className="h-6 w-6 animate-spin rounded-full border-2 border-muted border-t-primary" /></div> : filteredEntries.length === 0 ? (
-        <EmptyState icon={ClipboardList} title="No session entries yet" description="Add a roadway, range, or frontage definition so the portal can generate the full session stack for you." />
+        <EmptyState icon={ClipboardList} title="No session entries yet" description="Add a roadway, range, or frontage definition so the portal can generate Right Profile, Left Profile, curb line, cross section, and optional 360 sessions for you." />
       ) : (
         <div className="grid gap-4">
           {filteredEntries.map((entry) => {
@@ -194,31 +210,45 @@ export default function CaptureSessionEntries() {
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <StatusBadge status={entry.active === false ? 'inactive' : 'active'} />
+                      <StatusBadge status={entry.generation_status || 'not_started'} />
                       <span className="rounded-full border px-2 py-1 text-xs text-muted-foreground">Order {entry.recording_order || 0}</span>
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4 text-sm text-muted-foreground">
                   <div className="grid gap-3 lg:grid-cols-[1.1fr_0.9fr]">
-                    <div className="rounded-lg border p-3">
-                      <p><span className="font-medium text-foreground">Street / range:</span> {entry.street_name || 'Custom area'}{entry.from_location || entry.to_location ? ` · ${entry.from_location || '?'} to ${entry.to_location || '?'}` : ''}</p>
-                      {(entry.address_range_start || entry.address_range_end) && <p><span className="font-medium text-foreground">Addresses:</span> {entry.address_range_start || '?'} to {entry.address_range_end || '?'}</p>}
+                    <div className="rounded-lg border p-3 space-y-2">
+                      <p><span className="font-medium text-foreground">Road / range:</span> {entry.street_name || 'Custom area'}{entry.from_location || entry.to_location ? ` · ${entry.from_location || '?'} to ${entry.to_location || '?'}` : ''}</p>
+                      {(entry.address_range_start || entry.address_range_end) && <p><span className="font-medium text-foreground">Address range:</span> {entry.address_range_start || '?'} to {entry.address_range_end || '?'}</p>}
                       <p><span className="font-medium text-foreground">Frontage:</span> {formatLabel(entry.frontage_side || 'both')}</p>
-                      <p><span className="font-medium text-foreground">Notes:</span> {entry.notes || 'No extra setup notes.'}</p>
+                      <p><span className="font-medium text-foreground">Field note:</span> {entry.notes || 'No extra setup notes.'}</p>
                     </div>
                     <div className="rounded-lg border p-3">
-                      <p className="font-medium text-foreground">Generated session set</p>
+                      <p className="font-medium text-foreground">Generated session recipe</p>
                       <div className="mt-2 flex flex-wrap gap-2">
-                        {enabledViews.map((template) => <span key={template.key} className="rounded-full border px-2 py-1 text-xs">{template.label}</span>)}
+                        {enabledViews.map((template) => <Badge key={template.key} variant="outline">{template.label}</Badge>)}
                       </div>
-                      <p className="mt-3 text-xs text-muted-foreground">Already generated: {generatedSessions.length}</p>
+                      <p className="mt-3 text-xs text-muted-foreground">Current generated count: {generatedSessions.length}</p>
+                    </div>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <div className="mb-2 flex items-center gap-2">
+                      <ListOrdered className="h-4 w-4 text-primary" />
+                      <p className="font-medium text-foreground">Session order preview</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {enabledViews.map((template, index) => (
+                        <span key={template.key} className="rounded-full border px-2 py-1 text-xs">
+                          {Number(entry.recording_order || 0) * 10 + index} · {template.label}
+                        </span>
+                      ))}
                     </div>
                   </div>
                   {generatedSessions.length > 0 && (
                     <div className="rounded-lg border p-3">
                       <p className="mb-2 font-medium text-foreground">Current generated sessions</p>
                       <div className="flex flex-wrap gap-2">
-                        {generatedSessions.map((session) => <span key={session.id} className="rounded-full border px-2 py-1 text-xs">{session.session_name}</span>)}
+                        {generatedSessions.map((session) => <span key={session.id} className="rounded-full border px-2 py-1 text-xs">{session.recording_order || 0} · {session.session_name}</span>)}
                       </div>
                     </div>
                   )}
@@ -244,7 +274,7 @@ export default function CaptureSessionEntries() {
             </div>
             <div className="grid gap-3 md:grid-cols-2">
               <div><Label>Entry name *</Label><Input value={form.entry_name} onChange={(event) => setForm((current) => ({ ...current, entry_name: event.target.value }))} placeholder="Main Street from Oak Ave to Elm Ave" /></div>
-              <div><Label>Street / corridor</Label><Input value={form.street_name} onChange={(event) => setForm((current) => ({ ...current, street_name: event.target.value }))} placeholder="Main Street" /></div>
+              <div><Label>Road / corridor / range</Label><Input value={form.street_name} onChange={(event) => setForm((current) => ({ ...current, street_name: event.target.value }))} placeholder="Main Street" /></div>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
               <div><Label>From</Label><Input value={form.from_location} onChange={(event) => setForm((current) => ({ ...current, from_location: event.target.value }))} placeholder="Oak Ave" /></div>
@@ -253,7 +283,7 @@ export default function CaptureSessionEntries() {
             <div className="grid gap-3 md:grid-cols-3">
               <div><Label>Address range start</Label><Input value={form.address_range_start} onChange={(event) => setForm((current) => ({ ...current, address_range_start: event.target.value }))} placeholder="100" /></div>
               <div><Label>Address range end</Label><Input value={form.address_range_end} onChange={(event) => setForm((current) => ({ ...current, address_range_end: event.target.value }))} placeholder="198" /></div>
-              <div><Label>Frontage</Label><Select value={form.frontage_side} onValueChange={(value) => setForm((current) => ({ ...current, frontage_side: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{['both', 'north', 'south', 'east', 'west', 'inside', 'outside'].map((value) => <SelectItem key={value} value={value}>{formatLabel(value)}</SelectItem>)}</SelectContent></Select></div>
+              <div><Label>Frontage details</Label><Select value={form.frontage_side} onValueChange={(value) => setForm((current) => ({ ...current, frontage_side: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{['both', 'north', 'south', 'east', 'west', 'inside', 'outside'].map((value) => <SelectItem key={value} value={value}>{formatLabel(value)}</SelectItem>)}</SelectContent></Select></div>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
               <div><Label>Municipality</Label><Input value={form.municipality} onChange={(event) => setForm((current) => ({ ...current, municipality: event.target.value }))} /></div>
@@ -263,7 +293,7 @@ export default function CaptureSessionEntries() {
             <div className="space-y-3 rounded-lg border p-4">
               <div>
                 <p className="text-sm font-medium text-foreground">Standard recording views</p>
-                <p className="text-xs text-muted-foreground">Turn on the views you want created when you use Generate Sessions.</p>
+                <p className="text-xs text-muted-foreground">The standard stack is Right Profile, Left Profile, Curb Line / Edge of Pavement, and Cross Section. Turn on 360 only if this entry needs it.</p>
               </div>
               <div className="grid gap-3 md:grid-cols-2">
                 {sessionTemplates.map((template) => (
@@ -271,7 +301,7 @@ export default function CaptureSessionEntries() {
                     <input type="checkbox" className="mt-1" checked={Boolean(form[template.key])} onChange={(event) => setForm((current) => ({ ...current, [template.key]: event.target.checked }))} />
                     <div>
                       <p className="font-medium text-foreground">{template.label}</p>
-                      <p className="text-xs text-muted-foreground">{template.captureMethod === 'video_360' ? 'Optional 360 pass.' : 'Standard generated recording session.'}</p>
+                      <p className="text-xs text-muted-foreground">{template.category === 'optional' ? 'Optional 360 run for this entry.' : 'Auto-generated recording session.'}</p>
                     </div>
                   </label>
                 ))}
