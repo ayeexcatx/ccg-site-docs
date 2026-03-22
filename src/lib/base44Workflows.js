@@ -178,7 +178,13 @@ export async function loadSystemInstructionsForPage({ pageKey, role }) {
   return instructions.filter((instruction) => {
     if (!instruction.is_active) return false;
     const pageMatch = !instruction.target_page || instruction.target_page === pageKey || instruction.target_page === 'all';
-    const roleMatch = !instruction.target_role || instruction.target_role === role || instruction.target_role === 'all';
+    let roleMatch = false;
+    try {
+      const targetRoles = instruction.target_role_json ? JSON.parse(instruction.target_role_json) : [];
+      roleMatch = !instruction.target_role_json || targetRoles.length === 0 || targetRoles.includes(role) || targetRoles.includes('all');
+    } catch {
+      roleMatch = !instruction.target_role_json;
+    }
     return pageMatch && roleMatch;
   });
 }
