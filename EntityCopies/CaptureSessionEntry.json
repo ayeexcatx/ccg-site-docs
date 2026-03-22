@@ -1,0 +1,25 @@
+{
+  "name": "CaptureSessionEntry",
+  "type": "object",
+  "properties": {
+    "project_id": { "type": "string" },
+    "capture_session_id": { "type": "string" },
+    "entry_type": {
+      "type": "string",
+      "enum": ["note", "observation", "gps_pairing", "issue", "milestone"],
+      "default": "note"
+    },
+    "title": { "type": "string" },
+    "entry_text": { "type": "string" },
+    "captured_at": { "type": "string" },
+    "timeline_label": { "type": "string" },
+    "gps_source": {
+      "type": "string",
+      "enum": ["manual", "gpx", "fit", "device_live", "derived"],
+      "default": "manual"
+    },
+    "latitude": { "type": "number" },
+    "longitude": { "type": "number" }
+  },
+  "required": ["capture_session_id", "title"]
+}

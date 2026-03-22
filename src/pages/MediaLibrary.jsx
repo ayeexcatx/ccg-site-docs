@@ -1,650 +1,84 @@
 import React, { useMemo, useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import PageHeader from '@/components/ui/PageHeader';
-import StatusBadge from '@/components/ui/StatusBadge';
 import EmptyState from '@/components/ui/EmptyState';
-import FutureReadyPanel from '@/components/ui/FutureReadyPanel';
-import AiDraftSuggestionPanel from '@/components/ui/AiDraftSuggestionPanel';
-import {
-  DocumentationPageIntro,
-  QAReviewChecklist,
-  VisibilityRulesPanel,
-  WorkflowStepsPanel,
-  NextStepPanel,
-} from '@/components/ui/OperatingGuidance';
+import StatusBadge from '@/components/ui/StatusBadge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Badge } from '@/components/ui/badge';
-import {
-  AlertTriangle,
-  File,
-  FileVideo,
-  Globe,
-  HardDrive,
-  Image,
-  Layers3,
-  Link2,
-  Plus,
-  Search,
-  ShieldCheck,
-  Video,
-} from 'lucide-react';
-import { VIEW_TYPE_LABELS } from '@/lib/constants';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { DocumentationPageIntro } from '@/components/ui/OperatingGuidance';
 import { PAGE_GUIDANCE } from '@/lib/workflowGuidance';
-import { createViewerCapabilityMatrix, getStorageAdapterBlueprints, resolveStorageAdapter } from '@/lib/futureArchitecture';
-
-const MEDIA_TYPES = ['photo', 'video', 'video_360', 'thumbnail', 'preview_clip', 'document', 'export'];
-const MEDIA_ICONS = { photo: Image, video: Video, video_360: Globe, thumbnail: Image, preview_clip: Video, document: File, export: File };
-const STORAGE_MODES = ['native_upload', 'external_link', 'future_connector_storage'];
-const PROCESSING_STATUSES = ['uploaded', 'processing', 'ready', 'error', 'archived'];
-const PUBLISH_READINESS = ['not_reviewed', 'needs_preview', 'needs_thumbnail', 'qa_hold', 'ready_for_publish', 'published'];
-const ORIGINAL_FILE_POLICIES = ['keep_in_app', 'register_external_master', 'archive_external_master'];
+import { FileVideo, Plus, Search } from 'lucide-react';
 
 const emptyMedia = {
-  project_id: '',
-  street_segment_id: '',
-  capture_session_id: '',
-  upload_batch_id: '',
-  media_type: 'video',
-  media_title: '',
-  original_filename: '',
-  source_kind: 'native_upload',
-  storage_mode: 'native_upload',
-  original_file_policy: 'keep_in_app',
-  file_url: '',
-  original_file_url: '',
-  preview_url: '',
-  thumbnail_url: '',
-  preview_status: 'missing',
-  thumbnail_status: 'missing',
-  processing_status: 'uploaded',
-  publish_readiness: 'not_reviewed',
-  publish_to_client: false,
-  client_safe_media_id: '',
-  is_primary_for_segment: false,
-  is_long_form: false,
-  long_form_minutes: '',
-  is_360_media: false,
-  external_storage_label: '',
-  external_storage_path: '',
-  media_title_override_for_client: '',
-  view_type: 'profile',
-  direction_label: '',
-  side_of_street: 'both',
-  internal_notes: '',
-  client_visible_notes: '',
+  project_id: '', capture_session_id: '', media_type: 'video', media_title: '', original_filename: '', source_kind: 'native_upload', storage_mode: 'native_upload', file_url: '', preview_url: '', thumbnail_url: '', processing_status: 'uploaded', publish_readiness: 'not_reviewed', publish_to_client: false, gps_track_id: '', track_pairing_status: 'unpaired', pairing_notes: '',
 };
 
-function SummaryStatCard({ icon: Icon, title, value, description, tone = 'default' }) {
-  const toneStyles = {
-    default: 'border-border',
-    warning: 'border-amber-200 bg-amber-50/50',
-    danger: 'border-red-200 bg-red-50/50',
-    success: 'border-emerald-200 bg-emerald-50/50',
-  };
-
-  return (
-    <Card className={toneStyles[tone] || toneStyles.default}>
-      <CardContent className="p-4">
-        <div className="flex items-start gap-3">
-          <div className="rounded-lg bg-background p-2 shadow-sm"><Icon className="h-4 w-4 text-primary" /></div>
-          <div>
-            <p className="text-sm font-medium text-muted-foreground">{title}</p>
-            <p className="text-2xl font-semibold">{value}</p>
-            <p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function SummaryAlertList({ title, icon: Icon, items, emptyMessage }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base"><Icon className="h-4 w-4 text-primary" /> {title}</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {!items.length ? (
-          <p className="text-sm text-muted-foreground">{emptyMessage}</p>
-        ) : items.map((item) => (
-          <div key={item.id} className="rounded-lg border p-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-medium">{item.title}</p>
-              {item.badges?.map((badge) => <Badge key={badge} variant="outline">{badge}</Badge>)}
-            </div>
-            <p className="mt-1 text-sm leading-6 text-muted-foreground">{item.description}</p>
-          </div>
-        ))}
-      </CardContent>
-    </Card>
-  );
-}
-
-function DetailRow({ label, value, helper }) {
-  return (
-    <div className="rounded-lg border bg-muted/20 p-3">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="mt-1 text-sm font-medium">{value || '—'}</p>
-      {helper && <p className="mt-1 text-xs leading-5 text-muted-foreground">{helper}</p>}
-    </div>
-  );
-}
-
 export default function MediaLibrary() {
-  const [showForm, setShowForm] = useState(false);
-  const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState(emptyMedia);
   const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState('all');
-  const [uploadMatcherInput, setUploadMatcherInput] = useState('');
-  const [aiReviewStates, setAiReviewStates] = useState({});
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState(emptyMedia);
   const queryClient = useQueryClient();
 
-  const { data: mediaFiles = [], isLoading } = useQuery({
-    queryKey: ['media'],
-    queryFn: () => base44.entities.MediaFile.list('-created_date', 200),
-  });
+  const { data: mediaFiles = [], isLoading } = useQuery({ queryKey: ['media-files'], queryFn: () => base44.entities.MediaFile.list('-created_date', 200) });
   const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: () => base44.entities.Project.list('-created_date', 100) });
-  const { data: segments = [] } = useQuery({ queryKey: ['segments'], queryFn: () => base44.entities.StreetSegment.list('sequence_order', 200) });
-  const { data: sessions = [] } = useQuery({ queryKey: ['sessions'], queryFn: () => base44.entities.CaptureSession.list('-created_date', 100) });
-  const { data: uploadBatches = [] } = useQuery({ queryKey: ['upload-batches'], queryFn: () => base44.entities.UploadBatch.list('-created_date', 100) });
-
-  const createMut = useMutation({
-    mutationFn: (d) => base44.entities.MediaFile.create(d),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['media'] }); closeForm(); },
-  });
-
-  const updateMut = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.MediaFile.update(id, data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['media'] }); closeForm(); },
-  });
-
-  const closeForm = () => { setShowForm(false); setEditing(null); setForm(emptyMedia); };
-  const openEdit = (media) => {
-    setEditing(media);
-    setForm({ ...emptyMedia, ...media });
-    setShowForm(true);
-  };
-  const handleSave = () => {
-    const normalized = {
-      ...form,
-      is_360_media: form.media_type === 'video_360' || form.view_type === '360_walk' || form.is_360_media,
-      source_kind: form.storage_mode === 'external_link' ? 'external_link' : form.source_kind,
-      preview_status: form.preview_url ? 'ready' : form.preview_status,
-      thumbnail_status: form.thumbnail_url ? 'ready' : form.thumbnail_status,
-    };
-    editing ? updateMut.mutate({ id: editing.id, data: normalized }) : createMut.mutate(normalized);
-  };
+  const { data: sessions = [] } = useQuery({ queryKey: ['capture-sessions'], queryFn: () => base44.entities.CaptureSession.list('-created_date', 200) });
+  const { data: gpsTracks = [] } = useQuery({ queryKey: ['gps-tracks'], queryFn: () => base44.entities.GpsTrack.list('-created_date', 200) });
+  const createMut = useMutation({ mutationFn: (data) => base44.entities.MediaFile.create(data), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['media-files'] }); setShowForm(false); setForm(emptyMedia); } });
 
   const projectMap = Object.fromEntries(projects.map((project) => [project.id, project.project_name]));
-  const segmentMap = Object.fromEntries(segments.map((segment) => [segment.id, segment.segment_name || segment.segment_code || 'Segment']));
   const sessionMap = Object.fromEntries(sessions.map((session) => [session.id, session.session_name]));
-  const batchMap = Object.fromEntries(uploadBatches.map((batch) => [batch.id, batch.batch_name]));
-
-  const storageBlueprints = getStorageAdapterBlueprints();
-
-  const filtered = useMemo(() => mediaFiles.filter((media) => {
-    const haystack = [media.media_title, media.original_filename, media.external_storage_label, media.internal_notes]
-      .filter(Boolean)
-      .join(' ')
-      .toLowerCase();
-    const matchSearch = haystack.includes(search.toLowerCase());
-    const matchType = typeFilter === 'all' || media.media_type === typeFilter;
-    return matchSearch && matchType;
-  }), [mediaFiles, search, typeFilter]);
-
-  const summary = useMemo(() => {
-    const missingPreviews = mediaFiles.filter((media) => (media.media_type === 'video' || media.media_type === 'video_360') && !media.preview_url);
-    const missingThumbnails = mediaFiles.filter((media) => !media.thumbnail_url && media.media_type !== 'document');
-    const notReady = mediaFiles.filter((media) => media.publish_to_client && media.publish_readiness !== 'ready_for_publish' && media.publish_readiness !== 'published');
-    const storageIssues = mediaFiles.filter((media) => {
-      if (media.storage_mode === 'external_link') return !media.file_url || !media.external_storage_label;
-      if (media.storage_mode === 'native_upload') return Boolean(media.external_storage_path) || media.source_kind === 'external_link';
-      return false;
-    });
-
-    return {
-      longFormCount: mediaFiles.filter((media) => media.is_long_form || Number(media.duration_seconds) >= 1200).length,
-      immersiveCount: mediaFiles.filter((media) => media.media_type === 'video_360' || media.is_360_media || media.view_type === '360_walk').length,
-      externalCount: mediaFiles.filter((media) => media.storage_mode === 'external_link').length,
-      uploadBatchLinkedCount: mediaFiles.filter((media) => media.upload_batch_id).length,
-      missingPreviews,
-      missingThumbnails,
-      notReady,
-      storageIssues,
-    };
-  }, [mediaFiles]);
-
-  const uploadMatchingSuggestions = useMemo(() => {
-    const filenames = uploadMatcherInput.split(/\n|,/).map((item) => item.trim()).filter(Boolean);
-    const orderedSessions = sessions
-      .filter((session) => session.street_segment_id === form.street_segment_id)
-      .sort((a, b) => (a.sequence_order ?? 0) - (b.sequence_order ?? 0));
-    return filenames.map((fileName, index) => ({ fileName, suggestedSession: orderedSessions[index] || null }));
-  }, [uploadMatcherInput, sessions, form.street_segment_id]);
-
-  const selectedStorage = resolveStorageAdapter(form.storage_mode);
-  const selectedViewer = createViewerCapabilityMatrix(form);
-
-  const aiMediaDraftSuggestions = useMemo(() => [
-    {
-      id: 'media-draft-tagging-queue',
-      title: 'Future media tagging queue placeholder',
-      badges: ['Draft only', 'Media workflow'],
-      summary: 'Reserved for future AI-assisted scene, landmark, sign, or business tagging suggestions linked to media records. Suggestions remain internal until staff review them and convert them into normal evidence records.',
-      fields: [
-        { label: 'Suggested source', value: 'Approved internal AI provider (future)', helper: 'Do not connect unapproved external providers directly into evidence workflows.' },
-        { label: 'Output destination', value: 'Marker Review + internal QA', helper: 'AI findings should feed review queues, not skip directly to client publishing.' },
-        { label: 'Client visibility', value: 'Blocked by default', helper: 'Staff review is required before anything becomes evidence or portal-visible.' },
-        { label: 'Media linkage', value: form.media_title || 'No media selected yet', helper: 'Future suggestions should always point back to a specific media record.' },
-      ],
-      reviewNote: 'Accept = move the draft into a manual review queue, Edit = refine metadata before use, Reject = discard the suggestion with no client impact.',
-    },
-  ], [form.media_title]);
-
-  const handleAiReviewAction = (suggestionId, nextState) => {
-    setAiReviewStates((current) => ({ ...current, [suggestionId]: nextState }));
-  };
+  const gpsMap = Object.fromEntries(gpsTracks.map((track) => [track.id, track.track_name]));
+  const filtered = useMemo(() => mediaFiles.filter((file) => [file.media_title, file.original_filename, projectMap[file.project_id], sessionMap[file.capture_session_id], gpsMap[file.gps_track_id]].filter(Boolean).join(' ').toLowerCase().includes(search.toLowerCase())), [mediaFiles, search, projectMap, sessionMap, gpsMap]);
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Media Library"
-        description="Manage roadway media records, review publish-safe derivatives, and keep long-form or 360 assets ready for future storage extensions."
-        helpText="Media records should stay in-house-first. Register the operational record here even when the original file lives in an approved external location."
-      >
-        <Button size="sm" className="gap-2" onClick={() => { setForm(emptyMedia); setShowForm(true); }}><Plus className="w-4 h-4" /> Register Media</Button>
+      <PageHeader title="Media Library" description="Register uploads, attach them to sessions, and pair video with GPX or FIT tracks." helpText="The GPS / track pairing flow now lives directly inside Media Library so uploads, sessions, and timeline indexing stay connected.">
+        <Button size="sm" className="gap-2" onClick={() => setShowForm(true)}><Plus className="h-4 w-4" /> Add Media</Button>
       </PageHeader>
-
       <DocumentationPageIntro guide={{ title: PAGE_GUIDANCE.media_library.title, sections: PAGE_GUIDANCE.media_library.sections }} />
-      <NextStepPanel step={PAGE_GUIDANCE.media_library.sections.nextStep} detail="Use the matching helper before QA starts so files are attached to the right ordered session from the beginning." />
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <SummaryAlertList title="Workflow helper summary" icon={AlertTriangle} items={[
-          { id: 'native-vs-external', title: 'Native upload vs external link', description: 'Use native upload for normal in-house files. Use external link when the original must stay in another governed storage location.', badges: ['Native = managed here', 'External = managed elsewhere'] },
-          { id: 'preview-vs-original', title: 'Preview vs original', description: 'Preview and thumbnail assets are for review and publish-safe access. Original file links are the master source and may stay internal.', badges: ['Preview-safe', 'Original master'] },
-        ]} emptyMessage="No media workflow helper items." />
-        <Card>
-          <CardHeader><CardTitle className="text-base">Upload matching helper</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            <Label>Paste uploaded filenames in order</Label>
-            <Textarea value={uploadMatcherInput} onChange={(event) => setUploadMatcherInput(event.target.value)} placeholder={`segment-right.mp4
-segment-left.mp4
-segment-curb.mp4`} className="min-h-24" />
-            <p className="text-xs text-muted-foreground">The helper uses the selected segment in the form and its ordered sessions to suggest file 1 → session 1, file 2 → session 2, and so on. You can still override manually in the media record.</p>
-            <div className="space-y-2">
-              {uploadMatchingSuggestions.length === 0 ? <p className="text-sm text-muted-foreground">Add filenames and choose a segment in the form to see matching suggestions.</p> : uploadMatchingSuggestions.map((item, index) => <div key={`${item.fileName}-${index}`} className="rounded-lg border p-3 text-sm"><p className="font-medium">File {index + 1}: {item.fileName}</p><p className="text-muted-foreground">Suggested session: {item.suggestedSession?.session_name || 'No matching session available yet'}</p></div>)}
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card><CardContent className="p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">Uploaded media</p><p className="mt-2 text-2xl font-semibold">{mediaFiles.length}</p><p className="mt-2 text-sm text-muted-foreground">All registered files in the library.</p></CardContent></Card>
+        <Card><CardContent className="p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">Paired with GPS</p><p className="mt-2 text-2xl font-semibold">{mediaFiles.filter((file) => file.gps_track_id || file.track_pairing_status === 'paired').length}</p><p className="mt-2 text-sm text-muted-foreground">Video or media already linked to GPX/FIT context.</p></CardContent></Card>
+        <Card><CardContent className="p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">Ready for publish</p><p className="mt-2 text-2xl font-semibold">{mediaFiles.filter((file) => ['ready_for_publish', 'published'].includes(file.publish_readiness)).length}</p><p className="mt-2 text-sm text-muted-foreground">Files that cleared internal media prep.</p></CardContent></Card>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <SummaryStatCard icon={Video} title="Long-form video records" value={summary.longFormCount} description="Records marked as long-form or exceeding 20 minutes. Review these for preview derivatives, batch traceability, and storage strategy." />
-        <SummaryStatCard icon={Globe} title="360 media records" value={summary.immersiveCount} description="Media that already requires future immersive-readiness metadata and careful client exposure rules." />
-        <SummaryStatCard icon={Link2} title="External-file registrations" value={summary.externalCount} description="Records whose authoritative original is outside the native upload path. Keep metadata internal and derivatives reviewable." tone={summary.externalCount ? 'warning' : 'default'} />
-        <SummaryStatCard icon={Layers3} title="Batch-linked media" value={summary.uploadBatchLinkedCount} description="Records linked to upload batches for operational tracking, especially useful for large ingest events and long-form captures." tone={summary.uploadBatchLinkedCount ? 'success' : 'warning'} />
-      </div>
+      <div className="relative max-w-sm"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search media, sessions, projects, or tracks" /></div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
-        <SummaryAlertList
-          title="Missing previews"
-          icon={AlertTriangle}
-          emptyMessage="All video-oriented records currently have preview links."
-          items={summary.missingPreviews.slice(0, 6).map((media) => ({
-            id: media.id,
-            title: media.media_title,
-            badges: [media.media_type, media.storage_mode],
-            description: 'Create or register a lighter preview asset before asking staff or clients to use this record for review. Long-form and 360 records should not rely on the original file alone.',
-          }))}
-        />
-        <SummaryAlertList
-          title="Missing thumbnails"
-          icon={Image}
-          emptyMessage="All non-document records currently have thumbnails."
-          items={summary.missingThumbnails.slice(0, 6).map((media) => ({
-            id: media.id,
-            title: media.media_title,
-            badges: [media.media_type],
-            description: 'Generate or attach a thumbnail so staff can visually verify the record and so the client portal can present stable media choices.',
-          }))}
-        />
-        <SummaryAlertList
-          title="Not ready for publish"
-          icon={ShieldCheck}
-          emptyMessage="No currently published media records are blocked by readiness flags."
-          items={summary.notReady.slice(0, 6).map((media) => ({
-            id: media.id,
-            title: media.media_title,
-            badges: [media.publish_readiness || 'unknown', media.processing_status || 'unknown'],
-            description: 'This record is marked for client publishing but still has readiness issues. Resolve QA, preview, or thumbnail gaps before exposing it externally.',
-          }))}
-        />
-        <SummaryAlertList
-          title="Storage-mode inconsistencies"
-          icon={HardDrive}
-          emptyMessage="No obvious native/external storage mismatches were detected."
-          items={summary.storageIssues.slice(0, 6).map((media) => ({
-            id: media.id,
-            title: media.media_title,
-            badges: [media.storage_mode || 'unset'],
-            description: 'The selected storage mode does not match the supporting fields on the record. Review source kind, file URL, storage label, and external path details before relying on this record operationally.',
-          }))}
-        />
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
-        <WorkflowStepsPanel
-          title="Operational workflow for production media"
-          steps={[
-            { title: 'Register the operational record', description: 'Create the MediaFile entry first and capture the project, segment, session, and if applicable upload batch. This record should exist even when the master file stays outside the app.' },
-            { title: 'Choose the storage pattern', description: 'Use native upload by default. Switch to an external-link pattern only when the original is too large, archival requirements demand it, or long-form source footage needs separate storage discipline.' },
-            { title: 'Attach publish-safe derivatives', description: 'Provide preview and thumbnail assets that staff and clients can load quickly. This is especially important for long-form roadway video and future 360 captures.' },
-            { title: 'Review processing and QA status', description: 'Track whether ingest, derivative generation, and internal review are complete. A usable file is not automatically a publish-ready file.' },
-            { title: 'Publish intentionally', description: 'Select a client-safe record or derivative only after readiness checks pass. Client exposure should favor the stable preview representation rather than raw masters.' },
-          ]}
-        />
-
-        <QAReviewChecklist
-          title="Media QA / release checklist"
-          items={[
-            { title: 'Session and segment linkage confirmed', description: 'Every media record should be tied to the correct project context so reviewers can understand where the footage belongs in the roadway documentation workflow.' },
-            { title: 'Preview and thumbnail present', description: 'Video, long-form, and 360 records should have derivatives for review. Missing preview or thumbnail assets should normally block release.' },
-            { title: 'Storage path is internally traceable', description: 'If the original is external, confirm the record includes the approved storage label/path and that staff can retrieve the authoritative master without exposing raw storage details to clients.' },
-            { title: 'Publish readiness is explicit', description: 'Do not infer readiness from a file URL alone. Use the processing and publish-readiness fields to communicate whether the asset is actually safe to expose.' },
-          ]}
-        />
-      </div>
-
-      <VisibilityRulesPanel
-        rules={[
-          { title: 'Prefer previews over originals', description: 'Client-facing selections should point to stable preview-safe derivatives unless there is a documented operational reason to expose the original file.' },
-          { title: 'Keep external storage details internal', description: 'Storage bucket names, archive paths, and retrieval notes belong in admin guidance and internal notes, not in client-visible labels.' },
-          { title: 'Block incomplete records from release', description: 'Any record missing a preview, thumbnail, or QA decision should remain internal even if it is otherwise searchable by staff.' },
-          { title: 'Use 360 publication sparingly until the viewer exists', description: 'Mark 360 records now, but keep them internal or clearly limited until an approved immersive presentation path is ready.' },
-        ]}
-      />
-
-      <FutureReadyPanel
-        title="Media future-ready areas"
-        description="These workflow notes keep the current app in-house-first while making room for larger source files and future 360 delivery without forcing a third-party provider into the current design."
-        items={[
-          {
-            key: 'viewer360',
-            title: '360 viewer extension point',
-            status: 'Extension-ready',
-            summary: '360-capable records should keep using the same operational metadata as other media so a future immersive viewer can attach later without changing how staff register, review, or publish files today.',
-            workflow: 'Operations register the record now, attach preview-safe derivatives now, and reserve immersive playback for a future approved renderer.',
-            entities: ['Project', 'CaptureSession', 'MediaFile'],
-            extensionPoints: filtered.slice(0, 2).map((media) => createViewerCapabilityMatrix(media).adminExplanation),
-          },
-          {
-            key: 'storageAdapters',
-            title: 'External storage adapter extension point',
-            status: 'In-house-first',
-            summary: 'The application should continue owning the operational record, publish rules, and QA workflow even if very large originals eventually live in an in-house object store or approved enterprise archive.',
-            workflow: 'Admins register metadata internally, storage adapters explain where bytes live, and publishing decisions still rely on internal readiness fields rather than vendor-specific behavior.',
-            entities: ['MediaFile', 'UploadBatch', 'CaptureSession', 'Project'],
-            extensionPoints: storageBlueprints.map((adapter) => `${adapter.label}: ${adapter.adminNotes}`),
-          },
-        ]}
-      />
-
-      <AiDraftSuggestionPanel
-        title="Draft AI media suggestion area"
-        description="This panel prepares Media Library for future AI-assisted tagging intake while keeping today's workflow manual-first, review-driven, and fully staff-controlled. Any AI output remains draft-only until staff approve it."
-        suggestions={aiMediaDraftSuggestions}
-        reviewStateMap={aiReviewStates}
-        onReviewAction={handleAiReviewAction}
-        emptyMessage="No AI media suggestions are connected. Continue registering and reviewing media manually until a staff-approved internal AI assistant is added."
-      />
-
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Search media..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
-        </div>
-        <Select value={typeFilter} onValueChange={setTypeFilter}>
-          <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Types</SelectItem>
-            {MEDIA_TYPES.map((type) => <SelectItem key={type} value={type}>{type.replace(/_/g, ' ')}</SelectItem>)}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {isLoading ? (
-        <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-muted border-t-primary rounded-full animate-spin" /></div>
-      ) : filtered.length === 0 ? (
-        <EmptyState icon={FileVideo} title="No media files found" description="Register or upload media files to build your documentation library." />
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map((media) => {
-            const MediaIcon = MEDIA_ICONS[media.media_type] || File;
-            const publishTone = media.publish_readiness === 'ready_for_publish' || media.publish_readiness === 'published';
-            return (
-              <Card key={media.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => openEdit(media)}>
-                <CardContent className="p-4 space-y-3">
-                  <div className="flex items-start gap-3">
-                    <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center shrink-0 overflow-hidden">
-                      {media.thumbnail_url ? <img src={media.thumbnail_url} alt="" className="w-12 h-12 rounded-lg object-cover" /> : <MediaIcon className="w-5 h-5 text-muted-foreground" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold truncate">{media.media_title}</p>
-                      <p className="text-xs text-muted-foreground truncate">{projectMap[media.project_id] || '—'} · {VIEW_TYPE_LABELS[media.view_type] || media.view_type}</p>
-                      <p className="text-xs text-muted-foreground truncate">{sessionMap[media.capture_session_id] || 'No session'} · {batchMap[media.upload_batch_id] || 'No batch'}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1 flex-wrap">
-                    <Badge variant="outline" className="text-[10px]">{media.media_type}</Badge>
-                    <Badge variant="outline" className="text-[10px]">{media.storage_mode || 'storage unset'}</Badge>
-                    {media.is_long_form && <Badge variant="outline" className="text-[10px]">long-form</Badge>}
-                    {(media.is_360_media || media.media_type === 'video_360') && <Badge variant="outline" className="text-[10px]">360</Badge>}
-                    <StatusBadge status={media.processing_status} />
-                    <Badge className={`text-[10px] ${publishTone ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{media.publish_readiness || 'not reviewed'}</Badge>
-                    {media.publish_to_client && <Badge className="bg-blue-100 text-blue-800 text-[10px]">Client selected</Badge>}
-                  </div>
-                  <p className="text-xs leading-5 text-muted-foreground">
-                    {media.preview_url ? 'Preview ready.' : 'Preview missing.'} {media.thumbnail_url ? 'Thumbnail ready.' : 'Thumbnail missing.'} {media.storage_mode === 'external_link' ? 'Original registered externally.' : 'Original managed in-house.'}
-                  </p>
-                </CardContent>
-              </Card>
-            );
-          })}
+      {isLoading ? <div className="flex justify-center py-12"><div className="h-6 w-6 animate-spin rounded-full border-2 border-muted border-t-primary" /></div> : filtered.length === 0 ? <EmptyState icon={FileVideo} title="No media in the library" description="Add uploaded files and pair them with sessions plus GPX/FIT tracks." /> : (
+        <div className="grid gap-4">
+          {filtered.map((file) => (
+            <Card key={file.id}>
+              <CardHeader className="pb-3"><div className="flex items-start justify-between gap-3"><div><CardTitle className="text-base">{file.media_title}</CardTitle><p className="mt-1 text-sm text-muted-foreground">{projectMap[file.project_id] || 'No project'} · {sessionMap[file.capture_session_id] || 'No session'}</p></div><div className="flex flex-wrap gap-2"><StatusBadge status={file.processing_status} /><StatusBadge status={file.track_pairing_status || 'unpaired'} /></div></div></CardHeader>
+              <CardContent className="space-y-3 text-sm text-muted-foreground">
+                <p>{file.original_filename || 'No source filename provided.'}</p>
+                <div className="flex flex-wrap gap-2 text-xs">
+                  <span className="rounded-full border px-2 py-1">Type: {file.media_type}</span>
+                  <span className="rounded-full border px-2 py-1">Track: {gpsMap[file.gps_track_id] || 'Not paired'}</span>
+                  <span className="rounded-full border px-2 py-1">Publish: {file.publish_readiness}</span>
+                </div>
+                {file.pairing_notes && <p>{file.pairing_notes}</p>}
+              </CardContent>
+            </Card>
+          ))}
         </div>
       )}
 
-      <Dialog open={showForm} onOpenChange={(open) => { if (!open) closeForm(); }}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing ? 'Edit Media' : 'Register Media File'}</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-            <div className="space-y-4">
-              <div className="rounded-lg border bg-muted/20 p-4">
-                <p className="text-sm font-semibold">Operating instructions for this form</p>
-                <div className="mt-2 space-y-2 text-sm leading-6 text-muted-foreground">
-                  <p>Create one record per operational asset. If you have both an original master and a preview derivative, keep them traceable here so reviewers know which file is for preservation and which is safe for quick playback or client delivery.</p>
-                  <p>Use native upload by default. Use external registration when the source file is too large for normal in-app handling or must remain in an approved archive. Either way, keep publish decisions in this system.</p>
-                  <p>Long-form roadway video and future 360 capture should usually publish from preview-safe derivatives, not from raw masters. Missing previews or thumbnails should usually keep the record internal.</p>
-                </div>
-              </div>
-
-              <div><Label>Title *</Label><Input value={form.media_title} onChange={e => setForm({ ...form, media_title: e.target.value })} /></div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label>Media Type</Label>
-                  <Select value={form.media_type} onValueChange={value => setForm({ ...form, media_type: value, is_360_media: value === 'video_360' ? true : form.is_360_media })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{MEDIA_TYPES.map((type) => <SelectItem key={type} value={type}>{type.replace(/_/g, ' ')}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>View Type</Label>
-                  <Select value={form.view_type} onValueChange={value => setForm({ ...form, view_type: value, is_360_media: value === '360_walk' ? true : form.is_360_media })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{Object.entries(VIEW_TYPE_LABELS).map(([key, value]) => <SelectItem key={key} value={key}>{value}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label>Project *</Label>
-                  <Select value={form.project_id || 'none'} onValueChange={value => setForm({ ...form, project_id: value === 'none' ? '' : value })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="none">Select...</SelectItem>{projects.map((project) => <SelectItem key={project.id} value={project.id}>{project.project_name}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Street Segment</Label>
-                  <Select value={form.street_segment_id || 'none'} onValueChange={value => setForm({ ...form, street_segment_id: value === 'none' ? '' : value })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="none">Select...</SelectItem>{segments.map((segment) => <SelectItem key={segment.id} value={segment.id}>{segment.segment_name || segment.segment_code || segment.id}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label>Capture Session</Label>
-                  <Select value={form.capture_session_id || 'none'} onValueChange={value => setForm({ ...form, capture_session_id: value === 'none' ? '' : value })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="none">Select...</SelectItem>{sessions.map((session) => <SelectItem key={session.id} value={session.id}>{session.session_name}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Upload Batch</Label>
-                  <Select value={form.upload_batch_id || 'none'} onValueChange={value => setForm({ ...form, upload_batch_id: value === 'none' ? '' : value })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="none">Select...</SelectItem>{uploadBatches.map((batch) => <SelectItem key={batch.id} value={batch.id}>{batch.batch_name}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label>Storage Mode</Label>
-                  <Select value={form.storage_mode} onValueChange={value => setForm({ ...form, storage_mode: value, source_kind: value === 'external_link' ? 'external_link' : 'native_upload' })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {STORAGE_MODES.map((mode) => <SelectItem key={mode} value={mode}>{mode.replace(/_/g, ' ')}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <p className="mt-1 text-xs leading-5 text-muted-foreground">Native upload is the in-house default. External registration is for oversized or archive-governed originals; keep the operational review workflow in this app either way.</p>
-                </div>
-                <div>
-                  <Label>Original File Policy</Label>
-                  <Select value={form.original_file_policy} onValueChange={value => setForm({ ...form, original_file_policy: value })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{ORIGINAL_FILE_POLICIES.map((policy) => <SelectItem key={policy} value={policy}>{policy.replace(/_/g, ' ')}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div><Label>Original Filename</Label><Input value={form.original_filename || ''} onChange={e => setForm({ ...form, original_filename: e.target.value })} /></div>
-                <div><Label>Original File URL</Label><Input value={form.original_file_url || ''} onChange={e => setForm({ ...form, original_file_url: e.target.value })} placeholder="Authoritative master path or URL" /></div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div><Label>Preview URL</Label><Input value={form.preview_url || ''} onChange={e => setForm({ ...form, preview_url: e.target.value, preview_status: e.target.value ? 'ready' : 'missing' })} placeholder="Review-safe derivative" /></div>
-                <div><Label>Thumbnail URL</Label><Input value={form.thumbnail_url || ''} onChange={e => setForm({ ...form, thumbnail_url: e.target.value, thumbnail_status: e.target.value ? 'ready' : 'missing' })} /></div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div><Label>Operational File URL</Label><Input value={form.file_url} onChange={e => setForm({ ...form, file_url: e.target.value })} placeholder="Current app playback or registration URL" /></div>
-                <div><Label>External Storage Label</Label><Input value={form.external_storage_label || ''} onChange={e => setForm({ ...form, external_storage_label: e.target.value })} placeholder="Archive name, object store, etc." /></div>
-              </div>
-
-              <div><Label>External Storage Path</Label><Input value={form.external_storage_path || ''} onChange={e => setForm({ ...form, external_storage_path: e.target.value })} placeholder="Internal-only retrieval path or key" /></div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label>Processing Status</Label>
-                  <Select value={form.processing_status} onValueChange={value => setForm({ ...form, processing_status: value })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{PROCESSING_STATUSES.map((status) => <SelectItem key={status} value={status}>{status.replace(/_/g, ' ')}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Publish Readiness</Label>
-                  <Select value={form.publish_readiness} onValueChange={value => setForm({ ...form, publish_readiness: value })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{PUBLISH_READINESS.map((status) => <SelectItem key={status} value={status}>{status.replace(/_/g, ' ')}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex items-center gap-2 rounded-lg border p-3"><Switch checked={form.is_long_form} onCheckedChange={value => setForm({ ...form, is_long_form: value })} /><Label>Long-form video</Label></div>
-                <div className="flex items-center gap-2 rounded-lg border p-3"><Switch checked={form.is_360_media} onCheckedChange={value => setForm({ ...form, is_360_media: value })} /><Label>360 media record</Label></div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div><Label>Approx. long-form minutes</Label><Input type="number" value={form.long_form_minutes || ''} onChange={e => setForm({ ...form, long_form_minutes: e.target.value })} /></div>
-                <div><Label>Client-safe record reference</Label><Input value={form.client_safe_media_id || ''} onChange={e => setForm({ ...form, client_safe_media_id: e.target.value })} placeholder="Derivative or sibling record ID" /></div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex items-center gap-2 rounded-lg border p-3"><Switch checked={form.publish_to_client} onCheckedChange={value => setForm({ ...form, publish_to_client: value })} /><Label>Publish to Client</Label></div>
-                <div className="flex items-center gap-2 rounded-lg border p-3"><Switch checked={form.is_primary_for_segment} onCheckedChange={value => setForm({ ...form, is_primary_for_segment: value })} /><Label>Primary for Segment</Label></div>
-              </div>
-
-              <div><Label>Client Title Override</Label><Input value={form.media_title_override_for_client || ''} onChange={e => setForm({ ...form, media_title_override_for_client: e.target.value })} placeholder="Optional simplified client label" /></div>
-              <div><Label>Internal Notes</Label><Textarea value={form.internal_notes} onChange={e => setForm({ ...form, internal_notes: e.target.value })} /></div>
-              <div><Label>Client-visible Notes</Label><Textarea value={form.client_visible_notes} onChange={e => setForm({ ...form, client_visible_notes: e.target.value })} /></div>
-            </div>
-
-            <div className="space-y-4">
-              <Card>
-                <CardHeader><CardTitle className="text-base">Media detail view</CardTitle></CardHeader>
-                <CardContent className="grid gap-3 md:grid-cols-2">
-                  <DetailRow label="Project" value={projectMap[form.project_id]} helper="Every media record should be anchored to a project before it is reviewed or published." />
-                  <DetailRow label="Segment" value={segmentMap[form.street_segment_id]} helper="Segment linkage helps long-form media remain navigable inside roadway workflows." />
-                  <DetailRow label="Session" value={sessionMap[form.capture_session_id]} helper="Capture session context explains when and how the asset was collected." />
-                  <DetailRow label="Upload batch" value={batchMap[form.upload_batch_id]} helper="Batch linkage is recommended for large ingest events, especially long-form capture days." />
-                  <DetailRow label="Storage adapter" value={selectedStorage?.label || 'Custom storage mode'} helper={selectedStorage?.adminNotes || 'If this record uses a custom path, document it thoroughly in internal notes.'} />
-                  <DetailRow label="Viewer family" value={selectedViewer.viewerFamily} helper={selectedViewer.adminExplanation} />
-                  <DetailRow label="Preview status" value={form.preview_url ? 'Preview attached' : 'Preview missing'} helper="Preview derivatives are the normal review-safe and publish-safe path for long-form and 360 media." />
-                  <DetailRow label="Thumbnail status" value={form.thumbnail_url ? 'Thumbnail attached' : 'Thumbnail missing'} helper="Thumbnails improve QA speed and client browsing stability." />
-                  <DetailRow label="Publish selection" value={form.publish_to_client ? 'Selected for client exposure' : 'Internal only'} helper="Only select client exposure when readiness, QA, and derivative coverage are complete." />
-                  <DetailRow label="Client-facing record" value={form.client_safe_media_id || 'Use this record directly'} helper="If the original should stay internal, point staff to the approved derivative or sibling publish-safe record here." />
-                </CardContent>
-              </Card>
-
-              <AiDraftSuggestionPanel
-                title="AI-assisted media review guardrails"
-                description="If future AI services propose landmarks, signs, businesses, or scene summaries from this media file, staff must treat those outputs as optional drafts only. Human review is required before anything joins the evidence workflow or becomes client-visible."
-                suggestions={aiMediaDraftSuggestions}
-                reviewStateMap={aiReviewStates}
-                onReviewAction={handleAiReviewAction}
-              />
-
-              <Card>
-                <CardHeader><CardTitle className="text-base">Admin workflow guidance</CardTitle></CardHeader>
-                <CardContent className="space-y-3 text-sm leading-6 text-muted-foreground">
-                  <p><span className="font-medium text-foreground">Native upload:</span> Use for most in-house managed photos, clips, previews, and thumbnails. This keeps review, storage, and publishing simpler.</p>
-                  <p><span className="font-medium text-foreground">External registration:</span> Use when the master must stay in an approved archive or object store. Pair it with an accessible preview and complete internal retrieval notes.</p>
-                  <p><span className="font-medium text-foreground">Long-form media:</span> Expect larger files, longer review windows, and stronger need for upload-batch tracking. Avoid publishing the raw master when a lighter preview will serve clients better.</p>
-                  <p><span className="font-medium text-foreground">360 media:</span> Mark the record now, store enough metadata for future immersive playback, and keep client exposure conservative until the approved viewer exists.</p>
-                  <p><span className="font-medium text-foreground">Publish-safe selection:</span> The record exposed to clients should have QA approval, a stable preview, and a thumbnail. If the master is external or heavy, publish from the derivative rather than the source.</p>
-                </CardContent>
-              </Card>
-            </div>
+      <Dialog open={showForm} onOpenChange={(open) => { if (!open) { setShowForm(false); setForm(emptyMedia); } }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>New media file</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-2"><div><Label>Project *</Label><Select value={form.project_id || 'none'} onValueChange={(value) => setForm((current) => ({ ...current, project_id: value === 'none' ? '' : value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">Select project</SelectItem>{projects.map((project) => <SelectItem key={project.id} value={project.id}>{project.project_name}</SelectItem>)}</SelectContent></Select></div><div><Label>Session</Label><Select value={form.capture_session_id || 'none'} onValueChange={(value) => setForm((current) => ({ ...current, capture_session_id: value === 'none' ? '' : value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">Select session</SelectItem>{sessions.map((session) => <SelectItem key={session.id} value={session.id}>{session.session_name}</SelectItem>)}</SelectContent></Select></div></div>
+            <div className="grid gap-3 md:grid-cols-2"><div><Label>Media title *</Label><Input value={form.media_title} onChange={(event) => setForm((current) => ({ ...current, media_title: event.target.value }))} /></div><div><Label>Original filename</Label><Input value={form.original_filename} onChange={(event) => setForm((current) => ({ ...current, original_filename: event.target.value }))} /></div></div>
+            <div className="grid gap-3 md:grid-cols-3"><div><Label>Media type</Label><Select value={form.media_type} onValueChange={(value) => setForm((current) => ({ ...current, media_type: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{['photo', 'video', 'video_360', 'thumbnail', 'preview_clip', 'document', 'export'].map((value) => <SelectItem key={value} value={value}>{value.replace(/_/g, ' ')}</SelectItem>)}</SelectContent></Select></div><div><Label>Track pairing</Label><Select value={form.track_pairing_status} onValueChange={(value) => setForm((current) => ({ ...current, track_pairing_status: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{['unpaired', 'candidate_match', 'paired', 'needs_review'].map((value) => <SelectItem key={value} value={value}>{value.replace(/_/g, ' ')}</SelectItem>)}</SelectContent></Select></div><div><Label>GPX / FIT track</Label><Select value={form.gps_track_id || 'none'} onValueChange={(value) => setForm((current) => ({ ...current, gps_track_id: value === 'none' ? '' : value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">No track</SelectItem>{gpsTracks.map((track) => <SelectItem key={track.id} value={track.id}>{track.track_name}</SelectItem>)}</SelectContent></Select></div></div>
+            <div><Label>Pairing notes</Label><Input value={form.pairing_notes} onChange={(event) => setForm((current) => ({ ...current, pairing_notes: event.target.value }))} placeholder="How this file was paired with the GPS track" /></div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={closeForm}>Cancel</Button>
-            <Button onClick={handleSave} disabled={!form.media_title || !form.project_id}>{editing ? 'Update' : 'Register'}</Button>
-          </DialogFooter>
+          <DialogFooter><Button variant="outline" onClick={() => { setShowForm(false); setForm(emptyMedia); }}>Cancel</Button><Button onClick={() => createMut.mutate(form)} disabled={!form.project_id || !form.media_title}>Save Media</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

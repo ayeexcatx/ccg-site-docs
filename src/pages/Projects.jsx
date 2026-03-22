@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import React, { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { Link } from 'react-router-dom';
 import PageHeader from '@/components/ui/PageHeader';
@@ -8,7 +8,7 @@ import PublishBadge from '@/components/ui/PublishBadge';
 import EmptyState from '@/components/ui/EmptyState';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { DocumentationPageIntro, NextStepPanel } from '@/components/ui/OperatingGuidance';
+import { DocumentationPageIntro } from '@/components/ui/OperatingGuidance';
 import { PAGE_GUIDANCE } from '@/lib/workflowGuidance';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -33,39 +33,27 @@ export default function Projects() {
   const [statusFilter, setStatusFilter] = useState('all');
   const queryClient = useQueryClient();
 
-  const { data: projects = [], isLoading } = useQuery({
-    queryKey: ['projects'],
-    queryFn: () => base44.entities.Project.list('-created_date', 100),
-  });
+  const { data: projects = [], isLoading } = useQuery({ queryKey: ['projects'], queryFn: () => base44.entities.Project.list('-created_date', 100) });
+  const { data: clients = [] } = useQuery({ queryKey: ['clients'], queryFn: () => base44.entities.ClientOrganization.list('-created_date', 100) });
+  const { data: sessions = [] } = useQuery({ queryKey: ['capture-sessions'], queryFn: () => base44.entities.CaptureSession.list('-created_date', 200) });
+  const createMut = useMutation({ mutationFn: (data) => base44.entities.Project.create(data), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['projects'] }); setShowForm(false); setForm(emptyProject); } });
 
-  const { data: clients = [] } = useQuery({
-    queryKey: ['clients'],
-    queryFn: () => base44.entities.ClientOrganization.list('-created_date', 100),
-  });
-
-  const createMut = useMutation({
-    mutationFn: (d) => base44.entities.Project.create(d),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['projects'] }); setShowForm(false); setForm(emptyProject); },
-  });
-
-  const clientMap = {};
-  clients.forEach(c => { clientMap[c.id] = c.name; });
-
-  const filtered = projects.filter(p => {
-    const matchSearch = p.project_name?.toLowerCase().includes(search.toLowerCase()) || p.project_code?.toLowerCase().includes(search.toLowerCase()) || p.municipality?.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = statusFilter === 'all' || p.project_status === statusFilter;
-    return matchSearch && matchStatus;
-  });
+  const clientMap = Object.fromEntries(clients.map((client) => [client.id, client.name]));
+  const sessionCounts = Object.fromEntries(projects.map((project) => [project.id, sessions.filter((session) => session.project_id === project.id).length]));
+  const filtered = useMemo(() => projects.filter((project) => {
+    const haystack = [project.project_name, project.project_code, project.municipality, clientMap[project.client_organization_id]].filter(Boolean).join(' ').toLowerCase();
+    const matchesSearch = haystack.includes(search.toLowerCase());
+    const matchesStatus = statusFilter === 'all' || project.project_status === statusFilter;
+    return matchesSearch && matchesStatus;
+  }), [projects, search, statusFilter, clientMap]);
 
   return (
-    <div>
-      <PageHeader title="Projects" description="All CCG documentation projects organized by client. Each project contains streets, segments, sessions, media, and markers."
-        helpText="Projects are the top-level container for all documentation work. Create a project first, then add street segments and capture sessions.">
-        <Button size="sm" className="gap-2" onClick={() => { setForm(emptyProject); setShowForm(true); }}><Plus className="w-4 h-4" /> New Project</Button>
+    <div className="space-y-6">
+      <PageHeader title="Projects" description="Top-level project records for the session-first documentation workflow.">
+        <Button size="sm" className="gap-2" onClick={() => setShowForm(true)}><Plus className="w-4 h-4" /> New Project</Button>
       </PageHeader>
 
       <DocumentationPageIntro guide={{ title: PAGE_GUIDANCE.projects.title, sections: PAGE_GUIDANCE.projects.sections }} />
-      <NextStepPanel step={PAGE_GUIDANCE.projects.sections.nextStep} detail="The project record only starts the workflow. Segment creation is where the operational plan becomes concrete." />
 
       <div className="flex items-center gap-3 mb-4 flex-wrap">
         <div className="relative flex-1 max-w-sm">
@@ -73,44 +61,29 @@ export default function Projects() {
           <Input placeholder="Search projects..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Status</SelectItem>
-            {['draft', 'active', 'in_review', 'published', 'archived'].map(s => <SelectItem key={s} value={s}>{s.replace(/_/g, ' ')}</SelectItem>)}
+            {['draft', 'active', 'in_review', 'published', 'archived'].map((status) => <SelectItem key={status} value={status}>{status.replace(/_/g, ' ')}</SelectItem>)}
           </SelectContent>
         </Select>
       </div>
 
-      {isLoading ? (
-        <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-muted border-t-primary rounded-full animate-spin" /></div>
-      ) : filtered.length === 0 ? (
-        <EmptyState icon={FolderOpen} title="No projects found" description="Create your first documentation project to get started." />
-      ) : (
+      {isLoading ? <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-muted border-t-primary rounded-full animate-spin" /></div> : filtered.length === 0 ? <EmptyState icon={FolderOpen} title="No projects found" description="Create your first documentation project to get started." /> : (
         <div className="grid gap-3">
-          {filtered.map(p => (
-            <Link key={p.id} to={`/projects/${p.id}`}>
+          {filtered.map((project) => (
+            <Link key={project.id} to={`/projects/${project.id}`}>
               <Card className="hover:shadow-md transition-shadow cursor-pointer">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                        <FolderOpen className="w-5 h-5 text-primary" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold">{p.project_name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {p.project_code} · {clientMap[p.client_organization_id] || 'No client'} · {p.municipality || 'No municipality'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <StatusBadge status={p.project_status} />
-                      <StatusBadge status={p.documentation_status} />
-                      <PublishBadge state={p.published_to_client ? 'client_published' : p.project_status === 'draft' ? 'draft_data' : 'internally_reviewed'} />
-                      <PublishBadge state={p.published_to_client ? 'publish_ready' : 'publish_blocked'} />
-                      {p.published_to_client && <StatusBadge status="published" />}
-                      <ArrowRight className="w-4 h-4 text-muted-foreground" />
-                    </div>
+                <CardContent className="p-4 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold">{project.project_name}</p>
+                    <p className="text-xs text-muted-foreground">{project.project_code} · {clientMap[project.client_organization_id] || 'No client'} · {sessionCounts[project.id] || 0} sessions</p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap justify-end">
+                    <StatusBadge status={project.project_status} />
+                    <StatusBadge status={project.documentation_status} />
+                    <PublishBadge state={project.published_to_client ? 'client_published' : 'draft_data'} />
+                    <ArrowRight className="w-4 h-4 text-muted-foreground" />
                   </div>
                 </CardContent>
               </Card>
@@ -119,39 +92,25 @@ export default function Projects() {
         </div>
       )}
 
-      <Dialog open={showForm} onOpenChange={(o) => { if (!o) { setShowForm(false); setForm(emptyProject); } }}>
+      <Dialog open={showForm} onOpenChange={(open) => { if (!open) { setShowForm(false); setForm(emptyProject); } }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>New Project</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Project Name *</Label><Input value={form.project_name} onChange={e => setForm({ ...form, project_name: e.target.value })} /></div>
-              <div><Label>Project Code *</Label><Input value={form.project_code} onChange={e => setForm({ ...form, project_code: e.target.value })} placeholder="e.g. PRJ-2026-001" /></div>
+              <div><Label>Project Code *</Label><Input value={form.project_code} onChange={e => setForm({ ...form, project_code: e.target.value })} /></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div><Label>Client Organization</Label>
-                <Select value={form.client_organization_id || 'none'} onValueChange={v => setForm({ ...form, client_organization_id: v === 'none' ? '' : v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Select client...</SelectItem>
-                    {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
+              <div><Label>Client Organization</Label><Select value={form.client_organization_id || 'none'} onValueChange={v => setForm({ ...form, client_organization_id: v === 'none' ? '' : v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">Select client...</SelectItem>{clients.map((client) => <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>)}</SelectContent></Select></div>
               <div><Label>Contract Number</Label><Input value={form.contract_number} onChange={e => setForm({ ...form, contract_number: e.target.value })} /></div>
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <div><Label>Municipality</Label><Input value={form.municipality} onChange={e => setForm({ ...form, municipality: e.target.value })} /></div>
-              <div><Label>County</Label><Input value={form.county} onChange={e => setForm({ ...form, county: e.target.value })} /></div>
-              <div><Label>State</Label><Input value={form.state} onChange={e => setForm({ ...form, state: e.target.value })} /></div>
             </div>
             <div><Label>Work Scope Summary</Label><Textarea value={form.work_scope_summary} onChange={e => setForm({ ...form, work_scope_summary: e.target.value })} /></div>
             <div><Label>Project Limits</Label><Textarea value={form.project_limits_description} onChange={e => setForm({ ...form, project_limits_description: e.target.value })} /></div>
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-6 flex-wrap">
               <div className="flex items-center gap-2"><Switch checked={form.include_photos} onCheckedChange={v => setForm({ ...form, include_photos: v })} /><Label>Photos</Label></div>
               <div className="flex items-center gap-2"><Switch checked={form.include_standard_video} onCheckedChange={v => setForm({ ...form, include_standard_video: v })} /><Label>Standard Video</Label></div>
               <div className="flex items-center gap-2"><Switch checked={form.include_360_video} onCheckedChange={v => setForm({ ...form, include_360_video: v })} /><Label>360° Video</Label></div>
             </div>
-            <div><Label>Internal Notes</Label><Textarea value={form.internal_notes} onChange={e => setForm({ ...form, internal_notes: e.target.value })} placeholder="Only visible to CCG staff" /></div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setShowForm(false); setForm(emptyProject); }}>Cancel</Button>
