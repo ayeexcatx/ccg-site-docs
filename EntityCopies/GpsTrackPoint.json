@@ -1,0 +1,42 @@
+{
+  "name": "GpsTrackPoint",
+  "type": "object",
+  "properties": {
+    "gps_track_id": {
+      "type": "string"
+    },
+    "timestamp": {
+      "type": "string"
+    },
+    "latitude": {
+      "type": "number"
+    },
+    "longitude": {
+      "type": "number"
+    },
+    "elevation": {
+      "type": "number"
+    },
+    "speed": {
+      "type": "number"
+    },
+    "heading": {
+      "type": "number"
+    },
+    "accuracy": {
+      "type": "number"
+    },
+    "created_date": {
+      "type": "string"
+    },
+    "updated_date": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "gps_track_id",
+    "timestamp",
+    "latitude",
+    "longitude"
+  ]
+}

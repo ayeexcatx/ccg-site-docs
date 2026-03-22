@@ -2,24 +2,83 @@
   "name": "GpsTrack",
   "type": "object",
   "properties": {
-    "project_id": { "type": "string" },
-    "capture_session_id": { "type": "string" },
-    "track_name": { "type": "string" },
-    "track_format": {
+    "project_id": {
+      "type": "string"
+    },
+    "capture_session_id": {
+      "type": "string"
+    },
+    "source_type": {
       "type": "string",
-      "enum": ["gpx", "fit", "geojson", "manual"],
+      "enum": [
+        "gpx",
+        "fit",
+        "geojson",
+        "device_sync",
+        "manual"
+      ],
       "default": "gpx"
     },
-    "track_file_url": { "type": "string" },
-    "sample_count": { "type": "number" },
-    "track_start_time": { "type": "string" },
-    "track_end_time": { "type": "string" },
-    "pairing_status": {
-      "type": "string",
-      "enum": ["unpaired", "candidate_match", "paired", "needs_review"],
-      "default": "unpaired"
+    "original_filename": {
+      "type": "string"
     },
-    "notes": { "type": "string" }
+    "file_url": {
+      "type": "string"
+    },
+    "start_time": {
+      "type": "string"
+    },
+    "end_time": {
+      "type": "string"
+    },
+    "total_points": {
+      "type": "number",
+      "default": 0
+    },
+    "total_distance": {
+      "type": "number",
+      "default": 0
+    },
+    "upload_status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "uploaded",
+        "linked",
+        "error"
+      ],
+      "default": "pending"
+    },
+    "parsing_status": {
+      "type": "string",
+      "enum": [
+        "not_started",
+        "processing",
+        "parsed",
+        "needs_review",
+        "error"
+      ],
+      "default": "not_started"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "created_by": {
+      "type": "string"
+    },
+    "updated_by": {
+      "type": "string"
+    },
+    "created_date": {
+      "type": "string"
+    },
+    "updated_date": {
+      "type": "string"
+    }
   },
-  "required": ["project_id", "track_name"]
+  "required": [
+    "project_id",
+    "source_type",
+    "original_filename"
+  ]
 }

@@ -1,0 +1,86 @@
+{
+  "name": "TimelineIndexEntry",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string"
+    },
+    "capture_session_id": {
+      "type": "string"
+    },
+    "media_file_id": {
+      "type": "string"
+    },
+    "gps_track_id": {
+      "type": "string"
+    },
+    "start_seconds": {
+      "type": "number"
+    },
+    "end_seconds": {
+      "type": "number"
+    },
+    "latitude": {
+      "type": "number"
+    },
+    "longitude": {
+      "type": "number"
+    },
+    "nearest_road": {
+      "type": "string"
+    },
+    "nearest_intersection": {
+      "type": "string"
+    },
+    "nearest_address": {
+      "type": "string"
+    },
+    "address_range": {
+      "type": "string"
+    },
+    "nearby_place_name": {
+      "type": "string"
+    },
+    "place_type": {
+      "type": "string"
+    },
+    "search_text": {
+      "type": "string"
+    },
+    "confidence": {
+      "type": "number"
+    },
+    "source_type": {
+      "type": "string",
+      "enum": [
+        "gps_track",
+        "map_match",
+        "manual",
+        "hybrid"
+      ],
+      "default": "gps_track"
+    },
+    "client_visible": {
+      "type": "boolean",
+      "default": false
+    },
+    "created_by": {
+      "type": "string"
+    },
+    "updated_by": {
+      "type": "string"
+    },
+    "created_date": {
+      "type": "string"
+    },
+    "updated_date": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id",
+    "capture_session_id",
+    "media_file_id",
+    "start_seconds"
+  ]
+}

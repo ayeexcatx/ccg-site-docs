@@ -39,8 +39,11 @@
       "enum": [
         "not_started",
         "scheduled",
+        "entry_defined",
         "in_progress",
         "uploaded",
+        "synced",
+        "indexed",
         "reviewed",
         "published"
       ],
@@ -77,6 +80,20 @@
     "include_360_video": {
       "type": "boolean",
       "default": false
+    },
+    "gps_track_required": {
+      "type": "boolean",
+      "default": true
+    },
+    "default_sync_mode": {
+      "type": "string",
+      "enum": [
+        "timecode",
+        "manual_offset",
+        "device_clock",
+        "hybrid"
+      ],
+      "default": "manual_offset"
     },
     "published_to_client": {
       "type": "boolean",

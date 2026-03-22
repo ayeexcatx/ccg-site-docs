@@ -18,6 +18,9 @@
         "client_portal",
         "mapping",
         "media",
+        "gps",
+        "sync",
+        "timeline",
         "security"
       ],
       "default": "workflow"
@@ -30,6 +33,9 @@
       "description": "JSON array of roles that should see this instruction"
     },
     "target_page": {
+      "type": "string"
+    },
+    "related_entity_name": {
       "type": "string"
     },
     "is_active": {
